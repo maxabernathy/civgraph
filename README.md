@@ -44,6 +44,46 @@ Identify the people who connect otherwise disconnected communities. Bridge agent
 
 ![Bridge agents highlighted with betweenness centrality scores](docs/06-bridge-agents.png)
 
+## Exportable Artifacts
+
+Five print-resolution visualizations rendered to canvas, exportable as high-res PNG or PDF at up to 8x resolution (poster quality). The aesthetic draws from scientific engraving and naturalist specimen plates — ivory paper, fine ink lines, crosshatching, serif typography — rather than the typical tech-dashboard look.
+
+### Anatomies of Agency
+
+The hero artifact. Each of the city's 80 most influential agents is rendered as a unique radial glyph — a complete visual portrait encoding three dimensions of the individual:
+
+- **Agency** (core dot) — radius proportional to influence multiplied by assertiveness. How much this person can actually move the needle.
+- **Constraint** (ring arcs) — loyalty fills the ring clockwise, resources fill it counter-clockwise. The gap between arcs is proportional to openness: a narrow gap means a rigid, hard-to-sway agent; a wide gap means a receptive one.
+- **Intention** (outer spokes) — each spoke points to one of 20 fixed interest-domain positions (like hours on a clock). The pattern of spokes reveals what this person cares about.
+- **Political lean** — the entire glyph is rotated: left-leaning agents tilt left, right-leaning tilt right.
+- **Connectedness** — stipple density within the glyph encodes network degree.
+- **Clan** — ink color.
+
+No two glyphs are alike. The plate reads like a page from a 19th-century naturalist's field journal.
+
+![Agent Anatomies — specimen plate of the city's most influential individuals](docs/07-agent-anatomies.png)
+
+### Survey of Influence
+
+Topographic elevation map of influence density across the network. Agent positions from the force-directed layout become terrain coordinates; influence radiates outward via Gaussian kernel density estimation. Rendered with crosshatched elevation bands and ink contour lines at 15% intervals, with red survey markers for each agent.
+
+![Influence Survey — crosshatched topographic map](docs/08-influence-survey.png)
+
+### Constellations of Clan
+
+Astronomical star chart. Each clan forms a constellation connected by minimum-spanning-tree lines. The horizontal axis is political leaning (far left to far right), the vertical axis is influence. Star brightness and size scale with influence; high-influence agents get cross-flares.
+
+![Clan Constellations — star chart of social structure](docs/09-clan-constellations.png)
+
+### Opinion Fabric and Event Seismograph
+
+Two additional artifacts available after firing events:
+
+- **Opinion Fabric** — a woven-textile grid (rows = clans, columns = topics). Vertical green hatching = support, horizontal red hatching = opposition. Perpendicular cross-hatch in sepia reveals internal clan disagreement.
+- **Event Seismograph** — strip-chart waveforms. Each fired event gets a row. Amplitude = cascade reach per propagation step. Oscillation frequency increases with depth.
+
+All artifacts can be exported at 1x (screen), 2x (print), 4x (high-res), or 8x (poster) resolution via the modal toolbar.
+
 ## What It Models
 
 - **500 agents** — each with clan, district, occupation, political leaning, interests, personality traits (openness, assertiveness, loyalty), influence, and resources
@@ -60,7 +100,7 @@ Identify the people who connect otherwise disconnected communities. Bridge agent
 model.py      — Agent dataclass, city generator, graph queries, D3 export
 events.py     — Event system, influence propagation engine, coalition detection
 server.py     — FastAPI REST + WebSocket API
-static/       — D3.js frontend (index.html, app.js, style.css)
+static/       — D3.js frontend (index.html, app.js, style.css, artifacts.js)
 run.py        — Launcher
 ```
 
