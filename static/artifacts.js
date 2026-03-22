@@ -51,65 +51,121 @@ const Artifacts = (() => {
 
   // ── Shared drawing primitives ─────────────────────────────────────────
 
-  function getCanvasCtx(scale) {
-    scale = scale || parseInt(document.getElementById("res-select").value) || 2;
+  // A2 at 300 DPI = 4961 x 7016 px (portrait) / 7016 x 4961 (landscape)
+  const FORMAT_PRESETS = {
+    "1":    { label: "1x screen",   scale: 1 },
+    "2":    { label: "2x print",    scale: 2 },
+    "4":    { label: "4x high-res", scale: 4 },
+    "8":    { label: "8x poster",   scale: 8 },
+    "a2":   { label: "A2 300dpi",   w: 7016, h: 4961 },  // landscape
+    "a2p":  { label: "A2 portrait", w: 4961, h: 7016 },
+  };
+
+  function getCanvasCtx() {
+    const fmt = document.getElementById("res-select").value;
+    const preset = FORMAT_PRESETS[fmt] || FORMAT_PRESETS["2"];
     const canvas = document.getElementById("artifact-canvas");
     const wrap = document.getElementById("artifact-canvas-wrap");
-    const baseW = Math.min(wrap.clientWidth - 48, 1400);
-    const baseH = Math.min(wrap.clientHeight - 48, 900);
-    canvas.width = baseW * scale;
-    canvas.height = baseH * scale;
-    canvas.style.width = baseW + "px";
-    canvas.style.height = baseH + "px";
+
+    let baseW, baseH, scale;
+
+    if (preset.w) {
+      // Fixed pixel format (A2 etc) — compute base from target
+      scale = 1;
+      baseW = preset.w;
+      baseH = preset.h;
+      canvas.width = baseW;
+      canvas.height = baseH;
+      // Fit to screen for preview
+      const maxScreenW = wrap.clientWidth - 48;
+      const maxScreenH = wrap.clientHeight - 48;
+      const fitScale = Math.min(maxScreenW / baseW, maxScreenH / baseH);
+      canvas.style.width = Math.floor(baseW * fitScale) + "px";
+      canvas.style.height = Math.floor(baseH * fitScale) + "px";
+    } else {
+      scale = preset.scale || 2;
+      baseW = Math.min(wrap.clientWidth - 48, 1400);
+      baseH = Math.min(wrap.clientHeight - 48, 900);
+      canvas.width = baseW * scale;
+      canvas.height = baseH * scale;
+      canvas.style.width = baseW + "px";
+      canvas.style.height = baseH + "px";
+    }
+
     const ctx = canvas.getContext("2d");
-    ctx.scale(scale, scale);
+    if (scale > 1) ctx.scale(scale, scale);
+
     // Ivory paper background
     ctx.fillStyle = IVORY;
     ctx.fillRect(0, 0, baseW, baseH);
+
+    // Subtle paper grain texture
+    ctx.globalAlpha = 0.025;
+    for (let i = 0; i < baseW * baseH * 0.003; i++) {
+      const x = Math.random() * baseW;
+      const y = Math.random() * baseH;
+      ctx.fillStyle = Math.random() > 0.5 ? "#a09880" : "#d0c8b8";
+      ctx.fillRect(x, y, Math.random() * 1.5, Math.random() * 1.5);
+    }
+    ctx.globalAlpha = 1;
+
     return { ctx, w: baseW, h: baseH, canvas, scale };
   }
 
-  // Fine registration marks at corners
+  // Plate border: fine double rule + registration marks
   function drawRegistration(ctx, w, h) {
+    // Outer rule
     ctx.strokeStyle = INK_FAINT;
-    ctx.lineWidth = 0.3;
-    const m = 12;
-    const l = 8;
+    ctx.lineWidth = 0.4;
+    ctx.strokeRect(8, 8, w - 16, h - 16);
+    // Inner rule (thinner)
+    ctx.lineWidth = 0.15;
+    ctx.strokeRect(12, 12, w - 24, h - 24);
+    // Corner crosses
+    const m = 8;
+    const l = 6;
     [[m, m], [w - m, m], [m, h - m], [w - m, h - m]].forEach(([x, y]) => {
+      ctx.lineWidth = 0.3;
       ctx.beginPath();
       ctx.moveTo(x - l, y); ctx.lineTo(x + l, y);
       ctx.moveTo(x, y - l); ctx.lineTo(x, y + l);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
       ctx.stroke();
     });
   }
 
   function drawPlateTitle(ctx, w, title, subtitle, plateNum) {
+    // Title
     ctx.fillStyle = INK;
-    ctx.font = "italic 16px Georgia, 'Times New Roman', serif";
+    ctx.font = "italic 18px Georgia, 'Times New Roman', serif";
     ctx.textAlign = "center";
-    ctx.fillText(title, w / 2, 32);
-    ctx.font = "10px Georgia, serif";
+    ctx.fillText(title, w / 2, 34);
+    // Subtitle
+    ctx.font = "11px Georgia, serif";
     ctx.fillStyle = SEPIA;
-    ctx.fillText(subtitle, w / 2, 48);
-    // Plate number
+    ctx.fillText(subtitle, w / 2, 50);
+    // Plate number (left)
     ctx.font = "italic 9px Georgia, serif";
     ctx.fillStyle = INK_FAINT;
     ctx.textAlign = "left";
-    ctx.fillText("Plate " + (plateNum || "I"), 24, 32);
+    ctx.fillText("Plate " + (plateNum || "I"), 20, 34);
+    // Colophon (right)
     ctx.textAlign = "right";
-    ctx.fillText("CivGraph", w - 24, 32);
+    ctx.fillText("CivGraph", w - 20, 28);
     ctx.font = "8px Georgia, serif";
-    ctx.fillText(new Date().toISOString().slice(0, 10), w - 24, 44);
+    ctx.fillText(new Date().toISOString().slice(0, 10), w - 20, 40);
     ctx.textAlign = "left";
-    // Divider line
+    // Rule beneath title
     ctx.strokeStyle = INK_FAINT;
-    ctx.lineWidth = 0.3;
+    ctx.lineWidth = 0.25;
     ctx.beginPath();
-    ctx.moveTo(24, 54);
-    ctx.lineTo(w - 24, 54);
+    ctx.moveTo(20, 56);
+    ctx.lineTo(w - 20, 56);
+    ctx.stroke();
+    // Faint decorative rule (double line)
+    ctx.lineWidth = 0.12;
+    ctx.beginPath();
+    ctx.moveTo(20, 58);
+    ctx.lineTo(w - 20, 58);
     ctx.stroke();
   }
 
