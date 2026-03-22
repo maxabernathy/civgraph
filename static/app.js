@@ -15,6 +15,23 @@ let linkOpacity = 0.15;
 let ws = null;
 let eventHistory = [];  // local mirror of fired events
 
+// ── Security: HTML escaping ─────────────────────────────────────────────────
+
+const _escMap = {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+function esc(s) {
+  if (typeof s !== "string") return String(s);
+  return s.replace(/[&<>"']/g, c => _escMap[c]);
+}
+
+// Safe fetch wrapper — returns parsed JSON or null on error
+async function safeFetch(url, opts) {
+  try {
+    const r = await fetch(url, opts);
+    if (!r.ok) { console.error(`Fetch ${url}: ${r.status}`); return null; }
+    return await r.json();
+  } catch (e) { console.error(`Fetch ${url}:`, e); return null; }
+}
+
 // ── Color palettes ──────────────────────────────────────────────────────────
 
 const clanColors = d3.scaleOrdinal(d3.schemeTableau10.concat(d3.schemePastel1));
@@ -231,9 +248,9 @@ function drag(sim) {
 function showTooltip(event, d) {
   const tooltip = document.getElementById("tooltip");
   tooltip.innerHTML = `
-    <div class="name">${d.name}</div>
-    <div class="dim">${d.occupation.replace(/_/g, " ")} · ${d.district}</div>
-    <div>Clan: ${d.clan} · ${d.politics.replace(/_/g, " ")}</div>
+    <div class="name">${esc(d.name)}</div>
+    <div class="dim">${esc(d.occupation.replace(/_/g, " "))} · ${esc(d.district)}</div>
+    <div>Clan: ${esc(d.clan)} · ${esc(d.politics.replace(/_/g, " "))}</div>
     <div>Influence: ${(d.influence * 100).toFixed(0)}% · ${d.degree} connections</div>
   `;
   tooltip.classList.add("visible");
@@ -271,7 +288,7 @@ async function selectAgent(d) {
     .map(
       ([k, v]) =>
         `<div class="bar-row">
-        <span class="bar-label">${k}</span>
+        <span class="bar-label">${esc(k)}</span>
         <div class="bar-track">
           <div class="bar-fill ${v > 0 ? "positive" : v < 0 ? "negative" : "neutral"}"
                style="width:${Math.abs(v) * 100}%; margin-left:${v < 0 ? (100 - Math.abs(v) * 100) + "%" : "0"}"></div>
@@ -282,12 +299,12 @@ async function selectAgent(d) {
 
   document.getElementById("agent-detail").innerHTML = `
     <div class="agent-card">
-      <div class="name">${agent.name}</div>
+      <div class="name">${esc(agent.name)}</div>
       <div class="meta">
-        <span class="tag clan">${agent.clan}</span>
-        <span class="tag district">${agent.district}</span>
-        <span class="tag politics">${agent.politics.replace(/_/g, " ")}</span>
-        <br>${agent.occupation.replace(/_/g, " ")}
+        <span class="tag clan">${esc(agent.clan)}</span>
+        <span class="tag district">${esc(agent.district)}</span>
+        <span class="tag politics">${esc(agent.politics.replace(/_/g, " "))}</span>
+        <br>${esc(agent.occupation.replace(/_/g, " "))}
       </div>
       <div class="meta" style="margin-top:8px">
         <div class="bar-row"><span class="bar-label">Influence</span><div class="bar-track"><div class="bar-fill positive" style="width:${agent.influence * 100}%"></div></div></div>
@@ -297,7 +314,7 @@ async function selectAgent(d) {
         <div class="bar-row"><span class="bar-label">Resources</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.resources * 100}%"></div></div></div>
       </div>
       <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
-        Interests: ${agent.interests.map((i) => i.replace(/_/g, " ")).join(", ")}
+        Interests: ${agent.interests.map((i) => esc(i.replace(/_/g, " "))).join(", ")}
       </div>
     </div>
 
@@ -310,14 +327,19 @@ async function selectAgent(d) {
         .slice(0, 30)
         .map(
           (n) =>
-            `<li onclick="selectAgentById('${n.id}')">
-              <span>${n.name}</span>
-              <span class="rel">${n.rel} (${n.weight > 0 ? "+" : ""}${n.weight.toFixed(2)})</span>
+            `<li data-agent-id="${esc(n.id)}">
+              <span>${esc(n.name)}</span>
+              <span class="rel">${esc(n.rel)} (${n.weight > 0 ? "+" : ""}${n.weight.toFixed(2)})</span>
             </li>`
         )
         .join("")}
     </ul>
   `;
+
+  // Event delegation for neighbor clicks (replaces inline onclick)
+  document.querySelectorAll("#agent-detail .neighbor-list li[data-agent-id]").forEach((li) => {
+    li.addEventListener("click", () => selectAgentById(li.dataset.agentId));
+  });
 
   document.getElementById("btn-fire-event").textContent = `Fire Event from ${agent.name}`;
 }
@@ -556,11 +578,11 @@ function addLogEntry(event) {
   const entry = document.createElement("div");
   entry.className = "log-entry";
   entry.innerHTML = `
-    <span class="time">${time}</span>
-    <span class="event-name"> ${event.title}</span>
+    <span class="time">${esc(time)}</span>
+    <span class="event-name"> ${esc(event.title)}</span>
     <div class="impact">
       ${event.total_affected} affected · ${event.steps} steps ·
-      topic: ${event.topic} · sentiment: ${event.sentiment.toFixed(1)}
+      topic: ${esc(event.topic)} · sentiment: ${event.sentiment.toFixed(1)}
     </div>
   `;
   log.prepend(entry);
@@ -581,14 +603,19 @@ async function findBridges() {
       ${bridges
         .map(
           (b) =>
-            `<li onclick="selectAgentById('${b.agent.id}')">
-              <span>${b.agent.name}</span>
-              <span class="rel">${b.agent.clan} (${b.betweenness})</span>
+            `<li data-agent-id="${esc(b.agent.id)}">
+              <span>${esc(b.agent.name)}</span>
+              <span class="rel">${esc(b.agent.clan)} (${b.betweenness})</span>
             </li>`
         )
         .join("")}
     </ul>
   `;
+
+  // Event delegation for bridge agent clicks
+  document.querySelectorAll("#agent-detail .neighbor-list li[data-agent-id]").forEach((li) => {
+    li.addEventListener("click", () => selectAgentById(li.dataset.agentId));
+  });
 }
 
 async function resetSimulation() {
@@ -728,4 +755,3 @@ function sleep(ms) {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 window.addEventListener("load", init);
-window.selectAgentById = selectAgentById;
