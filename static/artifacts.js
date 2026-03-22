@@ -1103,6 +1103,488 @@ const Artifacts = (() => {
       "Advance simulation years to see the city's macro environment evolve.");
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // 7. EMERGENCE — Emergent Properties Observatory
+  //
+  // Scientific instrument panel showing 10 emergent dimensions as:
+  //   - Central radar/spider chart (composite scores)
+  //   - Surrounding detail panels for each dimension
+  //   - Trend sparklines if history available
+  //   - Research citation annotations
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const EMERGENCE_COLORS = {
+    polarization:             OXIDE,
+    inequality:               "#8b3a3a",
+    collective_intelligence:  VERDIGRIS,
+    contagion_susceptibility: "#b08f4a",
+    network_resilience:       INDIGO,
+    phase_transitions:        "#804040",
+    echo_chambers:            "#5a4080",
+    power_law:                SLATE,
+    institutional_trust:      "#2a6b4f",
+    cultural_convergence:     SEPIA,
+    information_theoretic:    "#4a6b8b",
+    norm_emergence:           "#6b5b3a",
+    segregation:              "#6b3a4a",
+  };
+
+  const EMERGENCE_LABELS = {
+    polarization:             "Polarization",
+    inequality:               "Inequality",
+    collective_intelligence:  "Collective Intelligence",
+    contagion_susceptibility: "Contagion Risk",
+    network_resilience:       "Network Resilience",
+    phase_transitions:        "Phase Transitions",
+    echo_chambers:            "Echo Chambers",
+    power_law:                "Power Law",
+    institutional_trust:      "Institutional Trust",
+    cultural_convergence:     "Cultural Convergence",
+    information_theoretic:    "Information Integration",
+    norm_emergence:           "Norm Emergence",
+    segregation:              "Segregation",
+  };
+
+  const EMERGENCE_ORDER = [
+    "polarization", "inequality", "collective_intelligence",
+    "contagion_susceptibility", "network_resilience", "phase_transitions",
+    "echo_chambers", "power_law", "institutional_trust", "cultural_convergence",
+    "information_theoretic", "norm_emergence", "segregation",
+  ];
+
+  function renderEmergence(emergenceData) {
+    const { ctx, w, h } = getCanvasCtx();
+    drawRegistration(ctx, w, h);
+    drawPlateTitle(ctx, w,
+      "Observatory of Emergence",
+      "Ten macro-phenomena arising from micro-level agent interaction",
+      "VII"
+    );
+
+    if (!emergenceData || !emergenceData.current) {
+      ctx.fillStyle = INK_FAINT;
+      ctx.font = "14px Georgia, serif";
+      ctx.textAlign = "center";
+      ctx.fillText("No emergence data yet. Advance the simulation to generate readings.", w / 2, h / 2);
+      setMeta("Advance the simulation (tick) to compute emergent properties.");
+      return;
+    }
+
+    const current = emergenceData.current;
+    const composites = current.coupled_composites || current.composites || {};
+    const rawComposites = current.composites || {};
+    const dimensions = current.dimensions || {};
+    const history = emergenceData.history || [];
+    const trends = emergenceData.trends || {};
+    const meta = current.meta || {};
+    const earlyWarnings = current.early_warnings || {};
+    const couplingMatrix = current.coupling_matrix || {};
+
+    const margin = { top: 66, right: 30, bottom: 50, left: 30 };
+    const iw = w - margin.left - margin.right;
+    const ih = h - margin.top - margin.bottom;
+
+    // ── Central radar chart ──────────────────────────────────────────
+    const radarCx = margin.left + iw * 0.5;
+    const radarCy = margin.top + ih * 0.36;
+    const radarR = Math.min(iw * 0.24, ih * 0.26);
+
+    const dims = EMERGENCE_ORDER;
+    const nDims = dims.length;
+
+    // Draw concentric rings
+    for (let ring = 1; ring <= 5; ring++) {
+      const r = (ring / 5) * radarR;
+      ctx.beginPath();
+      ctx.arc(radarCx, radarCy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = INK_FAINT;
+      ctx.lineWidth = ring === 5 ? 0.4 : 0.2;
+      ctx.globalAlpha = 0.3;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      // Ring label
+      if (ring % 2 === 0) {
+        ctx.fillStyle = INK_FAINT;
+        ctx.font = "5px Georgia, serif";
+        ctx.textAlign = "left";
+        ctx.fillText((ring * 20).toString(), radarCx + 2, radarCy - r + 3);
+      }
+    }
+
+    // Draw axis lines and labels
+    for (let i = 0; i < nDims; i++) {
+      const angle = (i / nDims) * Math.PI * 2 - Math.PI / 2;
+      const ex = radarCx + Math.cos(angle) * radarR;
+      const ey = radarCy + Math.sin(angle) * radarR;
+
+      ctx.beginPath();
+      ctx.moveTo(radarCx, radarCy);
+      ctx.lineTo(ex, ey);
+      ctx.strokeStyle = INK_FAINT;
+      ctx.lineWidth = 0.3;
+      ctx.globalAlpha = 0.4;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Label (radial, no rotation for clarity with 13 spokes)
+      const labelR = radarR + 10;
+      const lx = radarCx + Math.cos(angle) * labelR;
+      const ly = radarCy + Math.sin(angle) * labelR;
+      ctx.fillStyle = EMERGENCE_COLORS[dims[i]] || INK;
+      ctx.font = "bold 6px Georgia, serif";
+      // Position text based on quadrant
+      if (Math.abs(angle + Math.PI / 2) < 0.2) {
+        ctx.textAlign = "center";  // top
+      } else if (Math.cos(angle) < -0.1) {
+        ctx.textAlign = "right";
+      } else if (Math.cos(angle) > 0.1) {
+        ctx.textAlign = "left";
+      } else {
+        ctx.textAlign = "center";
+      }
+      const SHORT_LABELS = {
+        polarization: "Polar.", inequality: "Ineq.", collective_intelligence: "Coll.Int.",
+        contagion_susceptibility: "Contag.", network_resilience: "Resil.",
+        phase_transitions: "Tipping", echo_chambers: "Echo Ch.",
+        power_law: "Pwr Law", institutional_trust: "Trust",
+        cultural_convergence: "Conv.", information_theoretic: "Info",
+        norm_emergence: "Norms", segregation: "Segreg.",
+      };
+      ctx.fillText(SHORT_LABELS[dims[i]] || dims[i], lx, ly + 3);
+    }
+
+    // Draw filled radar polygon
+    ctx.beginPath();
+    for (let i = 0; i < nDims; i++) {
+      const angle = (i / nDims) * Math.PI * 2 - Math.PI / 2;
+      const val = composites[dims[i]] || 0;
+      const r = val * radarR;
+      const px = radarCx + Math.cos(angle) * r;
+      const py = radarCy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = INDIGO;
+    ctx.globalAlpha = 0.12;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = INDIGO;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Data points on radar
+    for (let i = 0; i < nDims; i++) {
+      const angle = (i / nDims) * Math.PI * 2 - Math.PI / 2;
+      const val = composites[dims[i]] || 0;
+      const r = val * radarR;
+      const px = radarCx + Math.cos(angle) * r;
+      const py = radarCy + Math.sin(angle) * r;
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fillStyle = EMERGENCE_COLORS[dims[i]] || INK;
+      ctx.fill();
+      // Value label
+      ctx.fillStyle = INK;
+      ctx.font = "bold 6px Georgia, serif";
+      ctx.textAlign = "center";
+      ctx.fillText((val * 100).toFixed(0), px, py - 6);
+    }
+
+    // Draw history overlay (previous snapshots as faded polygons)
+    if (history.length > 1) {
+      const older = history.slice(-Math.min(5, history.length), -1);
+      older.forEach((snap, si) => {
+        ctx.beginPath();
+        for (let i = 0; i < nDims; i++) {
+          const angle = (i / nDims) * Math.PI * 2 - Math.PI / 2;
+          const val = (snap.composites || {})[dims[i]] || 0;
+          const r = val * radarR;
+          const px = radarCx + Math.cos(angle) * r;
+          const py = radarCy + Math.sin(angle) * r;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = INK_FAINT;
+        ctx.lineWidth = 0.4;
+        ctx.globalAlpha = 0.15 + si * 0.05;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+    }
+
+    // ── Detail panels: 7 left, 6 right ─────────────────────────────
+    const panelW = iw * 0.22;
+    const panelH = ih * 0.085;
+    const panelGap = 4;
+    const leftCount = 7;
+
+    for (let i = 0; i < nDims; i++) {
+      const dim = dims[i];
+      const isLeft = i < leftCount;
+      const idx = isLeft ? i : i - leftCount;
+      const px = isLeft ? margin.left + 8 : w - margin.right - panelW - 8;
+      const py = margin.top + ih * 0.04 + idx * (panelH + panelGap);
+
+      const color = EMERGENCE_COLORS[dim] || INK;
+      const val = composites[dim] || 0;
+      const dimData = dimensions[dim] || {};
+      const trend = trends[dim] || 0;
+      const dimMeta = meta[dim] || {};
+
+      // Panel border
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 0.5;
+      ctx.globalAlpha = 0.3;
+      ctx.strokeRect(px, py, panelW, panelH);
+      ctx.globalAlpha = 1;
+
+      // Light fill
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.04;
+      ctx.fillRect(px, py, panelW, panelH);
+      ctx.globalAlpha = 1;
+
+      // Dimension name
+      ctx.fillStyle = color;
+      ctx.font = "bold 7px Georgia, serif";
+      ctx.textAlign = "left";
+      ctx.fillText(EMERGENCE_LABELS[dim] || dim, px + 4, py + 10);
+
+      // Composite bar
+      const barX = px + 4;
+      const barY = py + 15;
+      const barW = panelW - 8;
+      const barH = 5;
+      ctx.fillStyle = INK_FAINT;
+      ctx.globalAlpha = 0.15;
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = color;
+      ctx.fillRect(barX, barY, barW * val, barH);
+
+      // Value text
+      ctx.fillStyle = INK;
+      ctx.font = "bold 7px Georgia, serif";
+      ctx.textAlign = "right";
+      ctx.fillText((val * 100).toFixed(0) + "%", px + panelW - 4, py + 10);
+
+      // Trend arrow
+      if (Math.abs(trend) > 0.001) {
+        const arrowX = px + panelW - 20;
+        const arrowY = py + 10;
+        ctx.fillStyle = trend > 0 ? VERDIGRIS : OXIDE;
+        ctx.font = "8px Georgia, serif";
+        ctx.textAlign = "center";
+        ctx.fillText(trend > 0 ? "\u2191" : "\u2193", arrowX, arrowY);
+      }
+
+      // Sub-metrics (pick 2-3 key ones)
+      ctx.font = "5.5px Georgia, serif";
+      ctx.fillStyle = INK_LIGHT;
+      ctx.textAlign = "left";
+      let subY = py + 26;
+      const subKeys = Object.keys(dimData).filter(k => k !== "composite" && typeof dimData[k] === "number");
+      const showKeys = subKeys.slice(0, 3);
+      for (const key of showKeys) {
+        const label = key.replace(/_/g, " ");
+        const v = dimData[key];
+        ctx.fillText(`${label}: ${typeof v === "number" ? v.toFixed(3) : v}`, px + 4, subY);
+        subY += 7;
+      }
+
+      // Research citation (tiny)
+      if (dimMeta.research) {
+        ctx.font = "italic 4.5px Georgia, serif";
+        ctx.fillStyle = INK_FAINT;
+        ctx.fillText(dimMeta.research, px + 4, py + panelH - 3);
+      }
+
+      // Early warning indicator
+      const warning = earlyWarnings[dim];
+      if (warning && warning.warning_level > 0) {
+        const wColors = ["", OCHRE, OXIDE, "#dc2626"];
+        const wLabels = ["", "WATCH", "WARNING", "CRITICAL"];
+        const wLevel = warning.warning_level;
+        ctx.fillStyle = wColors[wLevel];
+        ctx.font = "bold 5px Georgia, serif";
+        ctx.textAlign = "right";
+        ctx.fillText(wLabels[wLevel], px + panelW - 4, py + panelH - 3);
+        // Warning dot
+        ctx.beginPath();
+        ctx.arc(px + panelW - 4 - ctx.measureText(wLabels[wLevel]).width - 4,
+                py + panelH - 5, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.textAlign = "left";
+      }
+
+      // Coupling indicator: show raw vs coupled delta
+      const rawVal = rawComposites[dim] || 0;
+      const couplingDelta = val - rawVal;
+      if (Math.abs(couplingDelta) > 0.01) {
+        ctx.font = "5px Georgia, serif";
+        ctx.fillStyle = couplingDelta > 0 ? VERDIGRIS : OXIDE;
+        ctx.textAlign = "left";
+        ctx.fillText(`coupling ${couplingDelta > 0 ? "+" : ""}${(couplingDelta * 100).toFixed(0)}%`,
+                     px + 4, py + panelH - 10);
+      }
+    }
+
+    // ── Coupling web: small network of feedback loops ──────────────
+    if (Object.keys(couplingMatrix).length > 0) {
+      const cwCx = radarCx;
+      const cwCy = margin.top + ih * 0.68;
+      const cwR = Math.min(iw * 0.12, ih * 0.08);
+
+      ctx.fillStyle = SEPIA;
+      ctx.font = "italic 7px Georgia, serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Coupling Web", cwCx, cwCy - cwR - 6);
+
+      // Place dimensions in a circle
+      const cwPositions = {};
+      for (let i = 0; i < nDims; i++) {
+        const a = (i / nDims) * Math.PI * 2 - Math.PI / 2;
+        cwPositions[dims[i]] = {
+          x: cwCx + Math.cos(a) * cwR,
+          y: cwCy + Math.sin(a) * cwR,
+        };
+      }
+
+      // Draw coupling edges
+      for (const [source, targets] of Object.entries(couplingMatrix)) {
+        const sp = cwPositions[source];
+        if (!sp) continue;
+        for (const [target, strength] of Object.entries(targets)) {
+          const tp = cwPositions[target];
+          if (!tp) continue;
+          ctx.beginPath();
+          ctx.moveTo(sp.x, sp.y);
+          ctx.lineTo(tp.x, tp.y);
+          ctx.strokeStyle = strength > 0 ? VERDIGRIS : OXIDE;
+          ctx.lineWidth = Math.abs(strength) * 6;
+          ctx.globalAlpha = 0.25;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // Draw dimension nodes
+      for (let i = 0; i < nDims; i++) {
+        const pos = cwPositions[dims[i]];
+        const val = composites[dims[i]] || 0;
+        const r = 2 + val * 3;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = EMERGENCE_COLORS[dims[i]] || INK;
+        ctx.fill();
+      }
+    }
+
+    // ── Bottom: sparkline history for all dimensions ──────────────────
+    if (history.length > 1) {
+      const sparkY = margin.top + ih * 0.78;
+      const sparkH = ih * 0.14;
+      const sparkW = iw - 20;
+      const sparkX = margin.left + 10;
+
+      // Section header
+      ctx.strokeStyle = INK_FAINT;
+      ctx.lineWidth = 0.25;
+      ctx.beginPath();
+      ctx.moveTo(sparkX, sparkY - 10);
+      ctx.lineTo(sparkX + sparkW, sparkY - 10);
+      ctx.stroke();
+      ctx.fillStyle = SEPIA;
+      ctx.font = "italic 8px Georgia, serif";
+      ctx.textAlign = "left";
+      ctx.fillText("Temporal Evolution", sparkX, sparkY - 2);
+
+      // Year labels
+      ctx.font = "5px Georgia, serif";
+      ctx.fillStyle = INK_FAINT;
+      ctx.textAlign = "center";
+      const maxPoints = history.length;
+      for (let p = 0; p < maxPoints; p += Math.max(1, Math.floor(maxPoints / 8))) {
+        const x = sparkX + (p / (maxPoints - 1)) * sparkW;
+        ctx.fillText("Y" + (history[p].year || p), x, sparkY + sparkH + 10);
+      }
+
+      // Grid lines
+      ctx.strokeStyle = INK_FAINT;
+      ctx.lineWidth = 0.12;
+      for (let g = 0; g <= 4; g++) {
+        const gy = sparkY + (g / 4) * sparkH;
+        ctx.beginPath();
+        ctx.moveTo(sparkX, gy);
+        ctx.lineTo(sparkX + sparkW, gy);
+        ctx.stroke();
+      }
+
+      // Sparklines per dimension
+      for (let d = 0; d < nDims; d++) {
+        const dim = dims[d];
+        const color = EMERGENCE_COLORS[dim] || INK;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 0.8;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        for (let p = 0; p < maxPoints; p++) {
+          const val = (history[p].composites || {})[dim] || 0;
+          const x = sparkX + (p / Math.max(1, maxPoints - 1)) * sparkW;
+          const y = sparkY + sparkH - val * sparkH;
+          if (p === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // End label
+        const lastVal = (history[maxPoints - 1].composites || {})[dim] || 0;
+        const lastX = sparkX + sparkW;
+        const lastY = sparkY + sparkH - lastVal * sparkH;
+        ctx.fillStyle = color;
+        ctx.font = "5px Georgia, serif";
+        ctx.textAlign = "left";
+        ctx.fillText(EMERGENCE_LABELS[dim], lastX + 3, lastY + 2);
+      }
+    }
+
+    // ── Bottom legend ────────────────────────────────────────────────
+    const ly = h - 42;
+    ctx.strokeStyle = INK_FAINT;
+    ctx.lineWidth = 0.3;
+    ctx.beginPath();
+    ctx.moveTo(24, ly - 6);
+    ctx.lineTo(w - 24, ly - 6);
+    ctx.stroke();
+
+    ctx.fillStyle = SEPIA;
+    ctx.font = "italic 8px Georgia, serif";
+    ctx.textAlign = "left";
+    ctx.fillText("Reading the observatory:", 30, ly + 4);
+    ctx.font = "7px Georgia, serif";
+    ctx.fillStyle = INK_LIGHT;
+    ctx.fillText(
+      "Central radar: 13 emergent dimensions with inter-dimension coupling (0-100%). " +
+      "Faded polygons = previous states. Side panels: sub-metrics, research citations, early warnings.",
+      30, ly + 14
+    );
+    ctx.fillText(
+      "Coupling effects shown as % delta from raw scores. Warning indicators (WATCH/WARNING/CRITICAL) " +
+      "from Scheffer critical slowing down detection. Sparklines track temporal evolution.",
+      30, ly + 24
+    );
+
+    setMeta(
+      "Thirteen emergent properties with bidirectional coupling, downward causation, " +
+      "adaptive rewiring, norm emergence, and Schelling segregation. " +
+      "Radar shows coupled composites. Early warnings detect approaching tipping points (Scheffer 2009). " +
+      "Advance ticks to see emergence dynamics unfold."
+    );
+  }
+
   // ── Meta / Export ─────────────────────────────────────────────────────
 
   function setMeta(text) {
@@ -1139,6 +1621,7 @@ const Artifacts = (() => {
     renderHeatmap,
     renderSeismograph,
     renderCityPulse,
+    renderEmergence,
     exportPNG,
     exportPDF,
   };

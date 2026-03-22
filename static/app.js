@@ -78,6 +78,12 @@ function nodeColor(d) {
     case "education":
       const edColors = {vocational:"#d97706",applied:"#059669",academic:"#2563eb",elite:"#7c3aed"};
       return edColors[d.education_track] || "#666";
+    case "emergence":
+      // Use pre-computed emergence_score if available, else approximate
+      const emScore = d.emergence_score > 0 ? d.emergence_score :
+        Math.min(1, (d.influence * 0.3 + (d.capital?.social || 0) * 0.3 +
+        (d.degree / 30) * 0.2 + (d.capital?.cultural || 0) * 0.2));
+      return d3.interpolateMagma(0.15 + emScore * 0.75);
     default:
       return "#4a9eff";
   }
@@ -267,11 +273,15 @@ function drag(sim) {
 
 function showTooltip(event, d) {
   const tooltip = document.getElementById("tooltip");
+  const emLine = d.emergence_score > 0
+    ? `<div class="dim">Emergence: ${(d.emergence_score * 100).toFixed(0)}% · Sat: ${(d.satisfaction * 100).toFixed(0)}%${d.norm_count ? ` · ${d.norm_count} norms` : ""}</div>`
+    : "";
   tooltip.innerHTML = `
     <div class="name">${esc(d.name)}</div>
     <div class="dim">${esc(d.occupation.replace(/_/g, " "))} · ${esc(d.district)}</div>
     <div>Clan: ${esc(d.clan)} · ${esc(d.politics.replace(/_/g, " "))}</div>
     <div>Influence: ${(d.influence * 100).toFixed(0)}% · ${d.degree} connections</div>
+    ${emLine}
   `;
   tooltip.classList.add("visible");
 
@@ -354,6 +364,17 @@ async function selectAgent(d) {
       <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
         Interests: ${agent.interests.map((i) => esc(i.replace(/_/g, " "))).join(", ")}
       </div>
+      ${detail.emergence && (detail.emergence.catalyst || detail.emergence.constrained) ? `
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">EMERGENCE</div>
+        <div class="bar-row"><span class="bar-label">Catalyst</span><div class="bar-track"><div class="bar-fill" style="width:${(detail.emergence.catalyst||0) * 100}%;background:#d4a85a"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Constrained</span><div class="bar-track"><div class="bar-fill" style="width:${(detail.emergence.constrained||0) * 100}%;background:#8a5ad4"></div></div></div>
+        <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px">
+          Bridging: ${((detail.emergence.bridging||0)*100).toFixed(0)}%
+          · Satisfaction: ${((agent.satisfaction||0)*100).toFixed(0)}%
+          · Norms: ${Object.keys(agent.norms||{}).length}
+        </div>
+      </div>` : ""}
     </div>
 
     ${opinions ? `<h2>Opinions</h2>${opinions}` : ""}
@@ -717,6 +738,7 @@ async function openArtifact(type) {
     heatmap: "FABRIC OF OPINION",
     seismograph: "SEISMOGRAPH OF EVENTS",
     citypulse: "PULSE OF THE CITY",
+    emergence: "OBSERVATORY OF EMERGENCE",
   };
   document.getElementById("artifact-title").textContent = titles[type] || "ARTIFACT";
 
@@ -751,6 +773,10 @@ async function openArtifact(type) {
       const envHist = await fetch("/api/environment/history").then((r) => r.json());
       const envMetaData = await fetch("/api/environment/meta").then((r) => r.json());
       Artifacts.renderCityPulse(envHist, envMetaData);
+      break;
+    case "emergence":
+      const emergenceData = await safeFetch("/api/emergence");
+      Artifacts.renderEmergence(emergenceData);
       break;
   }
 }
@@ -791,6 +817,10 @@ async function loadEnvironment() {
   envMeta = await fetch("/api/environment/meta").then((r) => r.json());
   const env = await fetch("/api/environment").then((r) => r.json());
   renderEnvironment(env);
+
+  // Load initial emergence data
+  const emergence = await safeFetch("/api/emergence");
+  if (emergence) renderEmergenceSummary(emergence);
 
   document.getElementById("btn-tick").addEventListener("click", advanceTick);
 }
@@ -846,6 +876,9 @@ async function advanceTick() {
   if (result && result.stats) {
     updateStats(result.stats);
   }
+  if (result && result.emergence) {
+    renderEmergenceSummary(result.emergence);
+  }
 
   // Refresh graph data to reflect capital changes
   graphData = await fetch("/api/graph").then((r) => r.json());
@@ -854,6 +887,113 @@ async function advanceTick() {
     .transition().duration(500)
     .attr("fill", nodeColor)
     .attr("r", nodeRadius);
+}
+
+// ── Emergence summary ───────────────────────────────────────────────────────
+
+const EMERGENCE_GROUPS = {
+  "social": {
+    label: "social",
+    dims: ["polarization", "echo_chambers", "segregation", "contagion_susceptibility"],
+  },
+  "structure": {
+    label: "structure",
+    dims: ["network_resilience", "power_law", "phase_transitions"],
+  },
+  "capital": {
+    label: "capital",
+    dims: ["inequality", "institutional_trust", "collective_intelligence"],
+  },
+  "culture": {
+    label: "culture",
+    dims: ["cultural_convergence", "norm_emergence", "information_theoretic"],
+  },
+};
+
+const EMERGENCE_DIM_LABELS = {
+  polarization: "Polarization",
+  inequality: "Inequality",
+  collective_intelligence: "Coll. Intl.",
+  contagion_susceptibility: "Contagion",
+  network_resilience: "Resilience",
+  phase_transitions: "Tipping",
+  echo_chambers: "Echo Chmbrs",
+  power_law: "Power Law",
+  institutional_trust: "Trust",
+  cultural_convergence: "Convergence",
+  information_theoretic: "Info Intgr.",
+  norm_emergence: "Norms",
+  segregation: "Segregation",
+};
+
+const EMERGENCE_DIM_COLORS = {
+  polarization: "#d46b6b",
+  inequality: "#d46b6b",
+  collective_intelligence: "#5ad49a",
+  contagion_susceptibility: "#d4a85a",
+  network_resilience: "#5a8fd4",
+  phase_transitions: "#d46b6b",
+  echo_chambers: "#8a5ad4",
+  power_law: "#8895a7",
+  institutional_trust: "#5ad49a",
+  cultural_convergence: "#a0845c",
+  information_theoretic: "#5a8fb0",
+  norm_emergence: "#b09a5a",
+  segregation: "#b05a6b",
+};
+
+function renderEmergenceSummary(emergence) {
+  const container = document.getElementById("emergence-gauges");
+  const statusEl = document.getElementById("emergence-status");
+  if (!container || !emergence || !emergence.current) return;
+
+  const composites = emergence.current.coupled_composites || emergence.current.composites || {};
+  const trends = emergence.trends || {};
+  const warnings = emergence.current.early_warnings || {};
+
+  // Status: count active warnings
+  const warnCount = Object.values(warnings).filter(w => w.warning_level >= 2).length;
+  const watchCount = Object.values(warnings).filter(w => w.warning_level === 1).length;
+  if (statusEl) {
+    if (warnCount > 0) {
+      statusEl.innerHTML = `<span style="color:var(--negative)">${warnCount} warning${warnCount > 1 ? "s" : ""}</span>`;
+    } else if (watchCount > 0) {
+      statusEl.innerHTML = `<span style="color:#d4a85a">${watchCount} watch</span>`;
+    } else {
+      statusEl.textContent = "stable";
+    }
+  }
+
+  let html = "";
+  for (const [groupKey, group] of Object.entries(EMERGENCE_GROUPS)) {
+    html += `<div class="emergence-group-label">${esc(group.label)}</div>`;
+    for (const dim of group.dims) {
+      const val = composites[dim];
+      if (val === undefined) continue;
+      const label = EMERGENCE_DIM_LABELS[dim] || dim;
+      const color = EMERGENCE_DIM_COLORS[dim] || "var(--accent)";
+      const pct = Math.max(0, Math.min(100, val * 100));
+      const trend = trends[dim] || 0;
+      const arrow = trend > 0.005 ? "\u2191" : trend < -0.005 ? "\u2193" : "";
+      const warning = warnings[dim];
+      let warnDot = "";
+      if (warning && warning.warning_level >= 3) {
+        warnDot = `<span class="emergence-warn critical" title="Critical: approaching tipping point"></span>`;
+      } else if (warning && warning.warning_level >= 2) {
+        warnDot = `<span class="emergence-warn warning" title="Warning: rising instability"></span>`;
+      } else if (warning && warning.warning_level >= 1) {
+        warnDot = `<span class="emergence-warn watch" title="Watch: rising autocorrelation"></span>`;
+      }
+      html += `<div class="emergence-gauge">
+        <span class="emergence-gauge-label">${esc(label)}${warnDot}</span>
+        <div class="emergence-gauge-track">
+          <div class="emergence-gauge-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <span class="emergence-gauge-val">${pct.toFixed(0)}%${arrow}</span>
+      </div>`;
+    }
+  }
+  container.innerHTML = html;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

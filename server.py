@@ -26,6 +26,11 @@ from environment import (
     Environment, create_environment, advance_environment,
     event_affects_environment, INDICATOR_DOMAINS, INDICATOR_META,
 )
+from emergence import (
+    EmergenceTracker, DIMENSION_META as EMERGENCE_META,
+    advance_emergence_dynamics, COUPLING_MATRIX,
+)
+import random as _random
 
 import networkx as nx
 
@@ -42,13 +47,16 @@ MAX_SEARCH_LIMIT = 500
 GRAPH: nx.Graph | None = None
 EVENT_HISTORY: list[dict] = []
 ENV: Environment | None = None
+EMERGENCE: EmergenceTracker | None = None
 
 
 def ensure_graph(seed: int | None = 42) -> nx.Graph:
-    global GRAPH, ENV
+    global GRAPH, ENV, EMERGENCE
     if GRAPH is None:
         GRAPH = generate_city(500, seed=seed)
         ENV = create_environment(seed)
+        EMERGENCE = EmergenceTracker()
+        EMERGENCE.snapshot(GRAPH, year=0)
     return GRAPH
 
 
@@ -57,6 +65,13 @@ def ensure_env() -> Environment:
     if ENV is None:
         ensure_graph()
     return ENV
+
+
+def ensure_emergence() -> EmergenceTracker:
+    global EMERGENCE
+    if EMERGENCE is None:
+        ensure_graph()
+    return EMERGENCE
 
 
 def _validate_agent_id(G: nx.Graph, agent_id: str) -> None:
@@ -96,9 +111,11 @@ async def index():
 
 @app.post("/api/reset")
 async def reset_graph(seed: int = 42):
-    global GRAPH, EVENT_HISTORY, ENV
+    global GRAPH, EVENT_HISTORY, ENV, EMERGENCE
     GRAPH = generate_city(500, seed=seed)
     ENV = create_environment(seed)
+    EMERGENCE = EmergenceTracker()
+    EMERGENCE.snapshot(GRAPH, year=0)
     EVENT_HISTORY = []
     return {"status": "ok", "stats": graph_stats(GRAPH), "environment": ENV.to_dict()}
 
@@ -134,10 +151,17 @@ async def get_agent_detail(agent_id: str):
             "weight": edge.get("weight", 0),
         })
 
+    # Include emergence scores if available
+    emg = ensure_emergence()
+    emergence_scores = {}
+    if emg.history:
+        emergence_scores = emg.history[-1].agent_scores.get(agent_id, {})
+
     return {
         "agent": agent.to_dict(),
         "neighbors": neighbors,
         "degree": G.degree(agent_id),
+        "emergence": emergence_scores,
     }
 
 
@@ -252,8 +276,16 @@ async def get_env_meta():
 async def advance_simulation(body: TickRequest):
     G = ensure_graph()
     env = ensure_env()
+    emg = ensure_emergence()
+    rng = _random.Random()
     result = advance_environment(env, G, years=body.years)
+    # Run emergence dynamics (downward causation, rewiring, norms, segregation)
+    dynamics = advance_emergence_dynamics(G, emg, rng)
     result["stats"] = graph_stats(G)
+    # Compute emergence snapshot at end of tick
+    snap = emg.snapshot(G, year=env.year)
+    result["emergence"] = snap.to_dict()
+    result["emergence_dynamics"] = dynamics
     return result
 
 
@@ -290,6 +322,62 @@ async def influence_path(source: str, target: str):
         return {"path": agents, "edges": edges, "length": len(path)}
     except nx.NetworkXNoPath:
         return {"path": [], "edges": [], "length": -1}
+
+
+# ── Emergence endpoints ──────────────────────────────────────────────────────
+
+@app.get("/api/emergence")
+async def get_emergence():
+    G = ensure_graph()
+    emg = ensure_emergence()
+    if not emg.history:
+        emg.snapshot(G, year=ensure_env().year)
+    return emg.to_dict()
+
+
+@app.get("/api/emergence/snapshot")
+async def get_emergence_snapshot():
+    """Compute a fresh emergence snapshot (does not record to history)."""
+    G = ensure_graph()
+    from emergence import EMERGENCE_DIMENSIONS
+    dimensions = {}
+    composites = {}
+    for name, func in EMERGENCE_DIMENSIONS:
+        result = func(G)
+        dimensions[name] = result
+        composites[name] = result.get("composite", 0.0)
+    return {"dimensions": dimensions, "composites": composites, "meta": EMERGENCE_META}
+
+
+@app.get("/api/emergence/history")
+async def get_emergence_history():
+    emg = ensure_emergence()
+    return emg.get_history()
+
+
+@app.get("/api/emergence/meta")
+async def get_emergence_meta():
+    return EMERGENCE_META
+
+
+@app.get("/api/emergence/coupling")
+async def get_emergence_coupling():
+    return COUPLING_MATRIX
+
+
+@app.get("/api/emergence/agent/{agent_id}")
+async def get_agent_emergence(agent_id: str):
+    """Get per-agent emergence attribution scores."""
+    G = ensure_graph()
+    _validate_agent_id(G, agent_id)
+    emg = ensure_emergence()
+    if emg.history:
+        scores = emg.history[-1].agent_scores.get(agent_id, {})
+    else:
+        from emergence import compute_agent_emergence_scores
+        all_scores = compute_agent_emergence_scores(G)
+        scores = all_scores.get(agent_id, {})
+    return scores
 
 
 # ── WebSocket for live propagation ──────────────────────────────────────────
