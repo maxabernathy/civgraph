@@ -918,6 +918,135 @@ const Artifacts = (() => {
       "Green ink = positive sentiment, red = negative, gray = neutral.");
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // 6. CITY PULSE — layered time-series of macro-environment indicators
+  //
+  // Horizontal strips, one per domain (economy, housing, migration,
+  // culture, governance). Each strip shows its indicators as overlapping
+  // ink traces on ivory, with crosshatch fill below the trace.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function renderCityPulse(history, meta) {
+    const { ctx, w, h } = getCanvasCtx();
+    drawRegistration(ctx, w, h);
+    drawPlateTitle(ctx, w,
+      "Pulse of the City",
+      `${history.length} year${history.length !== 1 ? "s" : ""} of macro-environment evolution`,
+      "VI"
+    );
+
+    if (history.length < 2) {
+      ctx.fillStyle = SEPIA;
+      ctx.font = "italic 12px Georgia, serif";
+      ctx.fillText("Advance the simulation (tick) to see environment evolution.", 40, 100);
+      setMeta("Use the tick button to advance years and generate environment history.");
+      return;
+    }
+
+    const domains = meta.domains;
+    const indicators = meta.indicators;
+    const domainNames = Object.keys(domains);
+    const margin = { top: 66, right: 40, bottom: 40, left: 100 };
+    const iw = w - margin.left - margin.right;
+    const ih = h - margin.top - margin.bottom;
+    const stripH = ih / domainNames.length;
+    const years = history.length;
+
+    const domainInks = [INDIGO, OCHRE, VERDIGRIS, "#5a4080", OXIDE];
+
+    for (let di = 0; di < domainNames.length; di++) {
+      const domain = domainNames[di];
+      const keys = domains[domain];
+      const baseY = margin.top + di * stripH;
+      const ink = domainInks[di % domainInks.length];
+
+      // Domain label
+      ctx.fillStyle = ink;
+      ctx.font = "italic 9px Georgia, serif";
+      ctx.textAlign = "right";
+      ctx.fillText(domain.charAt(0).toUpperCase() + domain.slice(1), margin.left - 12, baseY + stripH / 2 + 3);
+      ctx.textAlign = "left";
+
+      // Baseline
+      ctx.strokeStyle = INK_FAINT;
+      ctx.lineWidth = 0.2;
+      ctx.beginPath();
+      ctx.moveTo(margin.left, baseY + stripH - 2);
+      ctx.lineTo(margin.left + iw, baseY + stripH - 2);
+      ctx.stroke();
+
+      // Each indicator as a trace
+      for (let ki = 0; ki < keys.length; ki++) {
+        const key = keys[ki];
+        const ind = indicators[key];
+        if (!ind) continue;
+        const lo = ind.min, hi = ind.max;
+        const range = hi - lo || 1;
+
+        // Lighter ink for each subsequent indicator
+        const alpha = 0.7 - ki * 0.12;
+        ctx.strokeStyle = ink;
+        ctx.globalAlpha = Math.max(0.2, alpha);
+        ctx.lineWidth = ki === 0 ? 1.2 : 0.7;
+
+        // Build trace points
+        const points = [];
+        for (let yi = 0; yi < years; yi++) {
+          const val = history[yi][key] || 0;
+          const norm = (val - lo) / range;
+          const x = margin.left + (yi / (years - 1)) * iw;
+          const y = baseY + stripH - 4 - norm * (stripH - 8);
+          points.push({ x, y });
+        }
+
+        // Draw trace
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+
+        // Subtle fill below first trace only
+        if (ki === 0) {
+          ctx.globalAlpha = 0.04;
+          ctx.fillStyle = ink;
+          ctx.lineTo(points[points.length - 1].x, baseY + stripH - 2);
+          ctx.lineTo(points[0].x, baseY + stripH - 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Label last value
+        if (points.length > 0) {
+          const last = points[points.length - 1];
+          ctx.globalAlpha = Math.max(0.3, alpha);
+          ctx.font = "5px Georgia, serif";
+          ctx.fillStyle = ink;
+          const label = ind.label.split(" ").slice(-1)[0];
+          ctx.fillText(label, last.x + 3, last.y + 2);
+        }
+
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Year axis
+    ctx.fillStyle = INK_FAINT;
+    ctx.font = "7px Georgia, serif";
+    ctx.textAlign = "center";
+    const yearStep = Math.max(1, Math.floor(years / 10));
+    for (let yi = 0; yi < years; yi += yearStep) {
+      const x = margin.left + (yi / (years - 1 || 1)) * iw;
+      ctx.fillText(`Y${history[yi].year}`, x, h - margin.bottom + 14);
+    }
+    ctx.textAlign = "left";
+
+    setMeta("Five domain strips (economy, housing, migration, culture, governance). " +
+      "Each trace = one indicator within the domain. " +
+      "Advance simulation years to see the city's macro environment evolve.");
+  }
+
   // ── Meta / Export ─────────────────────────────────────────────────────
 
   function setMeta(text) {
@@ -953,6 +1082,7 @@ const Artifacts = (() => {
     renderConstellation,
     renderHeatmap,
     renderSeismograph,
+    renderCityPulse,
     exportPNG,
     exportPDF,
   };

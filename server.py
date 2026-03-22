@@ -22,6 +22,10 @@ from events import (
     create_event, opinion_summary, find_bridges, find_coalitions,
     EVENT_TEMPLATES,
 )
+from environment import (
+    Environment, create_environment, advance_environment,
+    event_affects_environment, INDICATOR_DOMAINS, INDICATOR_META,
+)
 
 import networkx as nx
 
@@ -37,13 +41,22 @@ MAX_SEARCH_LIMIT = 500
 
 GRAPH: nx.Graph | None = None
 EVENT_HISTORY: list[dict] = []
+ENV: Environment | None = None
 
 
 def ensure_graph(seed: int | None = 42) -> nx.Graph:
-    global GRAPH
+    global GRAPH, ENV
     if GRAPH is None:
         GRAPH = generate_city(500, seed=seed)
+        ENV = create_environment(seed)
     return GRAPH
+
+
+def ensure_env() -> Environment:
+    global ENV
+    if ENV is None:
+        ensure_graph()
+    return ENV
 
 
 def _validate_agent_id(G: nx.Graph, agent_id: str) -> None:
@@ -83,10 +96,11 @@ async def index():
 
 @app.post("/api/reset")
 async def reset_graph(seed: int = 42):
-    global GRAPH, EVENT_HISTORY
+    global GRAPH, EVENT_HISTORY, ENV
     GRAPH = generate_city(500, seed=seed)
+    ENV = create_environment(seed)
     EVENT_HISTORY = []
-    return {"status": "ok", "stats": graph_stats(GRAPH)}
+    return {"status": "ok", "stats": graph_stats(GRAPH), "environment": ENV.to_dict()}
 
 
 @app.get("/api/graph")
@@ -191,12 +205,56 @@ async def trigger_event(body: EventRequest):
     if len(EVENT_HISTORY) > MAX_EVENT_HISTORY:
         EVENT_HISTORY.pop(0)
 
+    # Event → Environment coupling
+    env = ensure_env()
+    event_affects_environment(env, body.event_type, body.intensity)
+    result["environment"] = env.to_dict()
+
     return result
 
 
 @app.get("/api/events")
 async def get_events():
     return EVENT_HISTORY
+
+
+# ── Environment endpoints ───────────────────────────────────────────────────
+
+class TickRequest(BaseModel):
+    years: int = Field(default=1, ge=1, le=10)
+
+
+@app.get("/api/environment")
+async def get_environment():
+    env = ensure_env()
+    return env.to_dict()
+
+
+@app.get("/api/environment/history")
+async def get_env_history():
+    env = ensure_env()
+    return env.get_history()
+
+
+@app.get("/api/environment/meta")
+async def get_env_meta():
+    return {
+        "domains": INDICATOR_DOMAINS,
+        "indicators": {
+            k: {"label": v[0], "min": v[1], "max": v[2], "format": v[3],
+                "higher_is_better": v[4]}
+            for k, v in INDICATOR_META.items()
+        },
+    }
+
+
+@app.post("/api/tick")
+async def advance_simulation(body: TickRequest):
+    G = ensure_graph()
+    env = ensure_env()
+    result = advance_environment(env, G, years=body.years)
+    result["stats"] = graph_stats(G)
+    return result
 
 
 @app.get("/api/opinion/{topic}")

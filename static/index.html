@@ -85,6 +85,7 @@
       <button class="btn" data-artifact="constellation">Clan Constellations <span class="icon">&#10022;</span></button>
       <button class="btn" data-artifact="heatmap">Opinion Fabric <span class="icon">&#9632;</span></button>
       <button class="btn" data-artifact="seismograph">Event Seismograph <span class="icon">&#126;</span></button>
+      <button class="btn" data-artifact="citypulse">City Pulse <span class="icon">&#9729;</span></button>
     </div>
 
     <h2>Analysis</h2>
@@ -108,6 +109,19 @@
 
   <!-- Bottom panel -->
   <div id="bottom">
+    <div id="env-panel">
+      <h2>Environment <span id="env-year" style="color:var(--accent);float:right">Year 0</span></h2>
+      <div id="env-gauges"></div>
+      <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
+        <button class="btn btn-primary" id="btn-tick" style="flex:1">Advance 1 Year</button>
+        <select id="tick-years" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px;border-radius:3px;font-family:inherit;font-size:inherit">
+          <option value="1">1y</option>
+          <option value="3">3y</option>
+          <option value="5">5y</option>
+          <option value="10">10y</option>
+        </select>
+      </div>
+    </div>
     <div id="event-panel">
       <h2>Trigger Event</h2>
       <div class="event-form">

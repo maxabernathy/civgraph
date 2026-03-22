@@ -132,6 +132,7 @@ async function init() {
   setupEvents();
   setupArtifacts();
   connectWebSocket();
+  loadEnvironment();
 
   document.getElementById("loading").classList.add("hidden");
 }
@@ -715,6 +716,7 @@ async function openArtifact(type) {
     constellation: "CONSTELLATIONS OF CLAN",
     heatmap: "FABRIC OF OPINION",
     seismograph: "SEISMOGRAPH OF EVENTS",
+    citypulse: "PULSE OF THE CITY",
   };
   document.getElementById("artifact-title").textContent = titles[type] || "ARTIFACT";
 
@@ -745,6 +747,11 @@ async function openArtifact(type) {
     case "seismograph":
       Artifacts.renderSeismograph(nodes, links, eventHistory);
       break;
+    case "citypulse":
+      const envHist = await fetch("/api/environment/history").then((r) => r.json());
+      const envMetaData = await fetch("/api/environment/meta").then((r) => r.json());
+      Artifacts.renderCityPulse(envHist, envMetaData);
+      break;
   }
 }
 
@@ -774,6 +781,79 @@ function connectWebSocket() {
   ws.onclose = () => {
     setTimeout(connectWebSocket, 3000);
   };
+}
+
+// ── Environment ─────────────────────────────────────────────────────────────
+
+let envMeta = null;
+
+async function loadEnvironment() {
+  envMeta = await fetch("/api/environment/meta").then((r) => r.json());
+  const env = await fetch("/api/environment").then((r) => r.json());
+  renderEnvironment(env);
+
+  document.getElementById("btn-tick").addEventListener("click", advanceTick);
+}
+
+function renderEnvironment(env) {
+  document.getElementById("env-year").textContent = `Year ${env.year}`;
+  const container = document.getElementById("env-gauges");
+
+  if (!envMeta) return;
+  const domains = envMeta.domains;
+  const meta = envMeta.indicators;
+
+  const domainColors = {
+    economy: "#4ade80", housing: "#fbbf24", migration: "#60a5fa",
+    culture: "#a78bfa", governance: "#f87171",
+  };
+
+  let html = "";
+  for (const [domain, keys] of Object.entries(domains)) {
+    html += `<div class="env-domain-label">${esc(domain)}</div>`;
+    for (const key of keys) {
+      const m = meta[key];
+      if (!m) continue;
+      const val = env.indicators[key] || 0;
+      const lo = m.min, hi = m.max;
+      const pct = Math.max(0, Math.min(100, ((val - lo) / (hi - lo)) * 100));
+      let display = m.format === "pct" ? (val * 100).toFixed(1) + "%" :
+                    m.format === "index" ? val.toFixed(2) : val.toFixed(2);
+      const color = domainColors[domain] || "var(--accent)";
+      html += `<div class="env-gauge">
+        <span class="env-gauge-label">${esc(m.label)}</span>
+        <div class="env-gauge-track">
+          <div class="env-gauge-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <span class="env-gauge-val">${display}</span>
+      </div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+async function advanceTick() {
+  const years = parseInt(document.getElementById("tick-years").value) || 1;
+  const result = await fetch("/api/tick", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ years }),
+  }).then((r) => r.json());
+
+  if (result && result.current) {
+    renderEnvironment(result.current);
+  }
+  if (result && result.stats) {
+    updateStats(result.stats);
+  }
+
+  // Refresh graph data to reflect capital changes
+  graphData = await fetch("/api/graph").then((r) => r.json());
+  // Update node visuals without rebuilding simulation
+  nodeGroup.selectAll("circle")
+    .transition().duration(500)
+    .attr("fill", nodeColor)
+    .attr("r", nodeRadius);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
