@@ -229,45 +229,49 @@ const Artifacts = (() => {
     ctx.fillStyle = INK_LIGHT;
     ctx.fillText(
       "Core dot = agency (influence x assertiveness).  " +
-      "Ring arcs = constraints (clockwise = loyalty, counter-clockwise = resources; gap = openness).  " +
-      "Spokes = intentions (one per interest domain, at fixed angular positions).",
+      "Four ring arcs = capital: green = economic, purple = cultural, blue = social, ochre = symbolic.  " +
+      "Arc length = capital volume.",
       30, ly + 18
     );
     ctx.fillText(
-      "Glyph rotation = political lean (left-tilted = left-leaning, right-tilted = right-leaning).  " +
-      "Stipple density = network degree.  Ink color = clan.",
+      "Spokes = intentions (interest domains at fixed angles).  Glyph rotation = political lean.  " +
+      "Openness gap at top.  Stipple density = network degree.  Ink color = clan.",
       30, ly + 30
     );
 
     setMeta(
-      "Top 80 agents by influence. Each glyph is a complete portrait: " +
-      "core = agency, ring = constraints, spokes = intentions, rotation = politics, " +
-      "stipple = connectedness. Export at 4x or 8x for print."
+      "Top 80 agents by influence. Each glyph encodes: core = agency (influence x assertiveness), " +
+      "four ring arcs = capital (economic/cultural/social/symbolic), spokes = interest domains, " +
+      "rotation = political lean, stipple = network degree. Export at 4x or 8x for print."
     );
   }
 
   function drawAgentGlyph(ctx, cx, cy, maxR, agent, clanIdx) {
     const ink = CLAN_INKS[clanIdx[agent.clan] % CLAN_INKS.length];
     const pol = POL_NUM[agent.politics] || 0;
-    const rotation = (pol / 3) * (Math.PI / 6); // subtle rotation
+    const rotation = (pol / 3) * (Math.PI / 6);
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rotation);
 
+    const cap = agent.capital || {};
+    const ec = cap.economic || 0;
+    const cu = cap.cultural || 0;
+    const so = cap.social || 0;
+    const sy = cap.symbolic || 0;
     const influence = agent.influence || 0;
     const assertiveness = agent.assertiveness || 0.5;
     const openness = agent.openness || 0.5;
     const loyalty = agent.loyalty || 0.5;
-    const resources = agent.resources || 0.5;
     const degree = agent.degree || 1;
     const interests = agent.interests || [];
 
-    // ── Outer spokes (INTENTION) ────────────────────────────────────
+    // ── Outer spokes (INTENTION: interests) ─────────────────────────
     ctx.strokeStyle = ink;
     ctx.lineWidth = 0.6;
     const spokeR = maxR * 0.95;
-    const innerSpokeR = maxR * 0.45;
+    const innerSpokeR = maxR * 0.55;
     for (const interest of interests) {
       const angle = INTEREST_ANGLES[interest];
       if (angle === undefined) continue;
@@ -275,86 +279,94 @@ const Artifacts = (() => {
       ctx.moveTo(Math.cos(angle) * innerSpokeR, Math.sin(angle) * innerSpokeR);
       ctx.lineTo(Math.cos(angle) * spokeR, Math.sin(angle) * spokeR);
       ctx.stroke();
-      // Small terminal circle
       ctx.beginPath();
       ctx.arc(Math.cos(angle) * spokeR, Math.sin(angle) * spokeR, 1.2, 0, Math.PI * 2);
       ctx.fillStyle = ink;
       ctx.fill();
     }
 
-    // ── Tick marks on outer edge for all interest positions ──────────
+    // ── Tick marks for interest positions ────────────────────────────
     ctx.strokeStyle = ink;
-    ctx.globalAlpha = 0.15;
+    ctx.globalAlpha = 0.12;
     ctx.lineWidth = 0.3;
-    const tickR = maxR * 0.9;
-    const tickOutR = maxR * 0.98;
     for (const key of ALL_INTERESTS) {
       const angle = INTEREST_ANGLES[key];
       ctx.beginPath();
-      ctx.moveTo(Math.cos(angle) * tickR, Math.sin(angle) * tickR);
-      ctx.lineTo(Math.cos(angle) * tickOutR, Math.sin(angle) * tickOutR);
+      ctx.moveTo(Math.cos(angle) * maxR * 0.88, Math.sin(angle) * maxR * 0.88);
+      ctx.lineTo(Math.cos(angle) * maxR * 0.96, Math.sin(angle) * maxR * 0.96);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
-    // ── Constraint ring ─────────────────────────────────────────────
-    const ringR = maxR * 0.4;
-    const gapAngle = openness * Math.PI * 0.4; // wider gap = more open
-    const loyaltyAngle = loyalty * (Math.PI * 2 - gapAngle * 2) * 0.5;
-    const resourceAngle = resources * (Math.PI * 2 - gapAngle * 2) * 0.5;
+    // ── Four capital quadrant arcs (CONSTRAINT/CAPACITY) ────────────
+    // Each capital type gets a quadrant arc; arc length = capital amount
+    const ringR = maxR * 0.48;
+    const capColors = ["#3a7d6e", "#5a4080", "#2e6090", "#b08f4a"]; // ec, cu, so, sy
+    const capValues = [ec, cu, so, sy];
+    const quadrants = [
+      -Math.PI / 2,    // top: economic
+      0,               // right: cultural
+      Math.PI / 2,     // bottom: social
+      Math.PI,         // left: symbolic
+    ];
 
-    // Full ring outline (faint)
+    // Faint full ring
     ctx.strokeStyle = ink;
-    ctx.globalAlpha = 0.2;
+    ctx.globalAlpha = 0.12;
     ctx.lineWidth = 0.4;
     ctx.beginPath();
     ctx.arc(0, 0, ringR, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // Loyalty arc (clockwise from top)
+    // Capital arcs
+    for (let q = 0; q < 4; q++) {
+      const startAngle = quadrants[q] - (Math.PI / 4);
+      const arcLength = capValues[q] * (Math.PI / 2); // max = full quadrant
+      if (arcLength < 0.05) continue;
+      ctx.strokeStyle = capColors[q];
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, ringR, startAngle, startAngle + arcLength);
+      ctx.stroke();
+    }
+
+    // Small capital labels at quadrant midpoints
+    ctx.font = "4px Georgia, serif";
+    ctx.fillStyle = ink;
+    ctx.globalAlpha = 0.35;
+    ctx.textAlign = "center";
+    const labelR = ringR + 6;
+    const capLabels = ["Ec", "Cu", "So", "Sy"];
+    for (let q = 0; q < 4; q++) {
+      const a = quadrants[q];
+      ctx.fillText(capLabels[q], Math.cos(a) * labelR, Math.sin(a) * labelR + 1.5);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+
+    // ── Openness gap marker ─────────────────────────────────────────
+    const gapLen = openness * 6;
     ctx.strokeStyle = ink;
-    ctx.lineWidth = 1.8;
-    const loyStart = -Math.PI / 2 + gapAngle;
-    const loyEnd = loyStart + loyaltyAngle;
-    if (loyaltyAngle > 0.05) {
-      ctx.beginPath();
-      ctx.arc(0, 0, ringR, loyStart, loyEnd);
-      ctx.stroke();
-    }
-
-    // Resource arc (counter-clockwise from top)
-    ctx.lineWidth = 1.8;
-    const resStart = -Math.PI / 2 - gapAngle;
-    const resEnd = resStart - resourceAngle;
-    if (resourceAngle > 0.05) {
-      ctx.beginPath();
-      ctx.arc(0, 0, ringR, resEnd, resStart);
-      ctx.stroke();
-    }
-
-    // Gap markers (small ticks at the openness gap boundaries)
     ctx.lineWidth = 0.4;
-    ctx.globalAlpha = 0.5;
-    [loyStart, resStart].forEach((a) => {
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * (ringR - 3), Math.sin(a) * (ringR - 3));
-      ctx.lineTo(Math.cos(a) * (ringR + 3), Math.sin(a) * (ringR + 3));
-      ctx.stroke();
-    });
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(-gapLen, -(ringR + 4));
+    ctx.lineTo(gapLen, -(ringR + 4));
+    ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // ── Core dot (AGENCY) ───────────────────────────────────────────
-    const coreR = 1.5 + influence * assertiveness * maxR * 0.35;
+    // ── Core dot (AGENCY: influence x assertiveness) ────────────────
+    const coreR = 1.5 + influence * assertiveness * maxR * 0.32;
     ctx.beginPath();
     ctx.arc(0, 0, coreR, 0, Math.PI * 2);
     ctx.fillStyle = ink;
     ctx.fill();
 
-    // ── Stipple (degree / connectedness) ────────────────────────────
+    // ── Stipple (social connectedness) ──────────────────────────────
     const stippleDensity = Math.min(1, Math.sqrt(degree) / 6);
     if (stippleDensity > 0.1) {
-      stipple(ctx, 0, 0, maxR * 0.35, stippleDensity * 0.8, ink + "40");
+      stipple(ctx, 0, 0, maxR * 0.35, stippleDensity * 0.7, ink + "30");
     }
 
     ctx.restore();

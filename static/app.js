@@ -48,6 +48,16 @@ const politicsColors = {
 
 const districtColors = d3.scaleOrdinal(d3.schemeSet3);
 
+const classColors = {
+  lower: "#8b5e3c", lower_middle: "#a0845c", middle: "#94a3b8",
+  upper_middle: "#6b8bb5", upper: "#3a5a8c",
+};
+
+const phaseColors = {
+  education: "#93c5fd", early_career: "#6ee7b7", mid_career: "#fbbf24",
+  established: "#f87171", elder: "#a78bfa",
+};
+
 function nodeColor(d) {
   if (d.highlighted) return "#fff";
   switch (colorMode) {
@@ -59,6 +69,15 @@ function nodeColor(d) {
       return districtColors(d.district);
     case "influence":
       return d3.interpolateYlOrRd(d.influence);
+    case "class":
+      return classColors[d.social_class] || "#666";
+    case "capital":
+      return d3.interpolateViridis(d.capital_volume);
+    case "age":
+      return d3.interpolatePlasma((d.age - 18) / 57);
+    case "education":
+      const edColors = {vocational:"#d97706",applied:"#059669",academic:"#2563eb",elite:"#7c3aed"};
+      return edColors[d.education_track] || "#666";
     default:
       return "#4a9eff";
   }
@@ -297,6 +316,8 @@ async function selectAgent(d) {
     )
     .join("");
 
+  const cap = agent.capital || {};
+  const hab = agent.habitus || {};
   document.getElementById("agent-detail").innerHTML = `
     <div class="agent-card">
       <div class="name">${esc(agent.name)}</div>
@@ -305,13 +326,29 @@ async function selectAgent(d) {
         <span class="tag district">${esc(agent.district)}</span>
         <span class="tag politics">${esc(agent.politics.replace(/_/g, " "))}</span>
         <br>${esc(agent.occupation.replace(/_/g, " "))}
+        · age ${agent.age} · ${esc((agent.life_phase || "").replace(/_/g, " "))}
       </div>
-      <div class="meta" style="margin-top:8px">
-        <div class="bar-row"><span class="bar-label">Influence</span><div class="bar-track"><div class="bar-fill positive" style="width:${agent.influence * 100}%"></div></div></div>
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">CAPITAL</div>
+        <div class="bar-row"><span class="bar-label">Economic</span><div class="bar-track"><div class="bar-fill positive" style="width:${(cap.economic||0) * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Cultural</span><div class="bar-track"><div class="bar-fill" style="width:${(cap.cultural||0) * 100}%;background:#a78bfa"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Social</span><div class="bar-track"><div class="bar-fill" style="width:${(cap.social||0) * 100}%;background:#38bdf8"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Symbolic</span><div class="bar-track"><div class="bar-fill" style="width:${(cap.symbolic||0) * 100}%;background:#fbbf24"></div></div></div>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">HABITUS</div>
+        <div style="font-size:0.85em">
+          Class: ${esc((hab.current_class||"").replace(/_/g," "))}
+          (origin: ${esc((hab.origin_class||"").replace(/_/g," "))})
+          <br>Education: ${esc((hab.education_track||"").replace(/_/g," "))}
+          · Taste: ${(hab.cultural_taste||0) > 0 ? "legitimate" : "popular"} (${(hab.cultural_taste||0).toFixed(2)})
+        </div>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">PERSONALITY</div>
         <div class="bar-row"><span class="bar-label">Openness</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.openness * 100}%"></div></div></div>
         <div class="bar-row"><span class="bar-label">Assertive</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.assertiveness * 100}%"></div></div></div>
         <div class="bar-row"><span class="bar-label">Loyalty</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.loyalty * 100}%"></div></div></div>
-        <div class="bar-row"><span class="bar-label">Resources</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.resources * 100}%"></div></div></div>
       </div>
       <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
         Interests: ${agent.interests.map((i) => esc(i.replace(/_/g, " "))).join(", ")}

@@ -84,24 +84,89 @@ Two additional artifacts available after firing events:
 
 All artifacts can be exported at 1x (screen), 2x (print), 4x (high-res), or 8x (poster) resolution via the modal toolbar.
 
+## Social Theory
+
+The simulation implements Pierre Bourdieu's capital framework, calibrated to Western European norms (France/Germany/Netherlands averages).
+
+### Four capitals
+
+Each agent carries four distinct forms of capital:
+
+- **Economic** — wealth, income, property. Beta-distributed by social class (Gini target ~0.32). Peaks during mid-career phase. A welfare-state floor of 0.15 prevents anyone from dropping to zero.
+- **Cultural** — education, credentials, taste. Strongly correlated with education track (vocational 0.20 base, elite 0.78). The stickiest capital across generations (intergenerational elasticity 0.50).
+- **Social** — network position, who you know. Derived from actual graph degree after generation. Well-connected agents spread information faster (lower activation threshold).
+- **Symbolic** — prestige, recognition, authority. Peaks in the established life phase (55-70). Partly inherited from clan reputation.
+
+Influence is derived: `0.4 * symbolic + 0.3 * social + 0.2 * economic + 0.1 * cultural`.
+
+### Habitus
+
+Each agent has internalized dispositions shaped by class origin and education:
+
+- **Cultural taste** (-1 popular to +1 legitimate) — correlated r=0.6 with origin class
+- **Risk tolerance** — U-shaped by class (high at extremes, low in middle)
+- **Institutional trust** — peaks in upper-middle class
+- **Class awareness** — higher at class extremes
+- **Aspiration gap** — difference between current and origin class position
+
+Habitus affects event reactions: high institutional trust amplifies governance events, low risk tolerance dampens crisis responses, cultural taste amplifies arts/education reactions. Agents with similar habitus form cross-clan bonds (habitus affinity ties).
+
+### Lifecycle
+
+Five phases with capital multipliers:
+
+| Phase | Ages | Economic | Cultural | Social | Symbolic |
+|---|---|---|---|---|---|
+| Education | 18-24 | 0.15 | 0.55 | 0.30 | 0.05 |
+| Early career | 25-34 | 0.50 | 0.75 | 0.50 | 0.15 |
+| Mid career | 35-54 | 1.00 | 0.90 | 0.80 | 0.50 |
+| Established | 55-69 | 0.85 | 1.00 | 1.00 | 1.00 |
+| Elder | 70+ | 0.70 | 0.95 | 0.75 | 0.90 |
+
+### Intergenerational transmission
+
+Within clans, agents aged 45+ are assigned as parents of agents under 30. Capital transmits with friction:
+
+- **Economic**: transfer rate 0.65 (after inheritance tax, FR/DE/NL average), elasticity 0.35
+- **Cultural**: elasticity 0.50 (Bourdieu's key finding — cultural capital is more hereditary than economic)
+- **Symbolic**: 30% from parent + 20% from clan average (family name carries weight)
+- **Habitus**: child inherits parent's cultural taste (0.6 weight), institutional trust (0.5), risk tolerance (0.4)
+- **Education track**: class-correlated probability tables (upper class: 35% elite, 45% academic; lower class: 60% vocational, 9% academic)
+
+### Class structure
+
+20 clans are assigned class centers (Delacroix = upper, Kowalski = lower). Individual agents deviate with noise, creating realistic within-clan variation. The resulting distribution targets Western European patterns:
+
+| Class | Target share |
+|---|---|
+| Upper | 5% |
+| Upper-middle | 15% |
+| Middle | 40% |
+| Lower-middle | 25% |
+| Lower | 15% |
+
 ## What It Models
 
-- **500 agents** — each with clan, district, occupation, political leaning, interests, personality traits (openness, assertiveness, loyalty), influence, and resources
-- **20 clans** with power-law size distributions, each anchored to a home district
+- **500 agents** — each with clan, district, occupation, political leaning, interests, four capitals, habitus, age, lifecycle phase, personality
+- **20 clans** with power-law sizes, each anchored to a home district and a class center
 - **10 districts** — agents have a 60% chance of living in their clan's home base
 - **7 political leanings** — far left to far right, with clan-correlated tendencies
-- **6 relationship types** — clan bonds, professional ties, political alliances, district neighbors, friendships, rivalries
-- **Influence propagation** — BFS cascade with per-hop decay, personality-modulated reactions, and rivalry inversion
+- **7 relationship types** — clan bonds, professional ties, political alliances, district neighbors, friendships, rivalries, habitus affinity
+- **Influence propagation** — BFS cascade with capital-weighted reactions, habitus disposition filtering, and social-capital-modulated activation thresholds
+- **13 event types** — elections, scandals, crises, protests, festivals, education reform, housing crises, cultural events, welfare reform, and more
 - **Emergent coalitions** — detect groups that form around shared opinions after events
 
 ## Architecture
 
 ```
-model.py      — Agent dataclass, city generator, graph queries, D3 export
-events.py     — Event system, influence propagation engine, coalition detection
-server.py     — FastAPI REST + WebSocket API
-static/       — D3.js frontend (index.html, app.js, style.css, artifacts.js)
-run.py        — Launcher
+capital.py    — Bourdieusian capital types, habitus, lifecycle curves,
+                intergenerational transmission, EU calibration constants
+model.py      — Agent dataclass, city generator (500 agents with capital/habitus),
+                graph queries, D3 export
+events.py     — Event system, capital-aware influence propagation, coalition detection
+server.py     — FastAPI REST + WebSocket API (Pydantic-validated, security-hardened)
+static/       — D3.js frontend (8 color modes, capital bars, artifact export)
+run.py        — Launcher (localhost-only)
 ```
 
 ## API
