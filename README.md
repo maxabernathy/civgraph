@@ -1,6 +1,8 @@
 # CivGraph
 
-Agent-based modeling on a social graph. Simulates 500 influential people in a mid-scale city with clan ties, political leanings, professional networks, and district connections.
+Agent-based modeling on a social graph. Simulates 500 influential people in a mid-scale city with clan ties, political leanings, professional networks, and district connections. Watch influence cascade through the network in real time.
+
+![Main graph view — 500 agents colored by clan](docs/01-main-graph.png)
 
 ## Quick Start
 
@@ -10,14 +12,47 @@ python run.py
 # Open http://localhost:8420
 ```
 
-## What It Does
+## The Graph
+
+500 agents connected by 2,600+ weighted edges across 6 relationship types. The force-directed layout clusters tightly-knit communities together and pushes rivals apart. Zoom, pan, and drag nodes to explore the network.
+
+### Color by political leaning
+
+Switch to **Politics** mode to see the ideological landscape. Red = left, blue = right, gray = center. Notice how political clusters overlap with but don't perfectly mirror clan boundaries.
+
+![Politics color mode — red/blue/gray spectrum](docs/02-politics-view.png)
+
+### Inspect any agent
+
+Click a node to see their full profile: clan, district, occupation, personality traits (openness, assertiveness, loyalty), influence score, and all connections sorted by relationship weight. The right panel shows bar charts for each trait and lists neighbors with their relationship type.
+
+![Agent detail panel with personality traits and connections](docs/03-agent-detail.png)
+
+### Fire events and watch influence propagate
+
+Select an origin agent, configure an event (type, topic, sentiment, intensity, political bias), and fire it. Influence cascades outward through the network — agents flash green (support) or red (oppose) as the event reaches them. Each agent's reaction depends on their political alignment, clan loyalty, personality, and the trust weight of the edge that carried the information.
+
+![Event propagation — agents reacting to a corruption scandal](docs/04-event-propagation.png)
+
+The event log tracks every event with impact metrics: how many agents were affected, how many propagation steps occurred, and the sentiment breakdown.
+
+![Post-event state with event log](docs/05-post-event.png)
+
+### Find bridge agents
+
+Identify the people who connect otherwise disconnected communities. Bridge agents have the highest betweenness centrality — they are the gatekeepers through which information and influence must travel between clusters.
+
+![Bridge agents highlighted with betweenness centrality scores](docs/06-bridge-agents.png)
+
+## What It Models
 
 - **500 agents** — each with clan, district, occupation, political leaning, interests, personality traits (openness, assertiveness, loyalty), influence, and resources
-- **Graph engine** — NetworkX graph with 6 relationship types: clan, professional, political, district, friendship, rivalry
-- **Event system** — trigger elections, scandals, crises, protests, etc. and watch influence cascade through the network in real time
+- **20 clans** with power-law size distributions, each anchored to a home district
+- **10 districts** — agents have a 60% chance of living in their clan's home base
+- **7 political leanings** — far left to far right, with clan-correlated tendencies
+- **6 relationship types** — clan bonds, professional ties, political alliances, district neighbors, friendships, rivalries
+- **Influence propagation** — BFS cascade with per-hop decay, personality-modulated reactions, and rivalry inversion
 - **Emergent coalitions** — detect groups that form around shared opinions after events
-- **Bridge agents** — find the people who connect otherwise disconnected communities
-- **D3.js visualization** — interactive force-directed graph, color by clan/politics/district/influence, filter, zoom, click to inspect
 
 ## Architecture
 
