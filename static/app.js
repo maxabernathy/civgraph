@@ -646,10 +646,11 @@ async function openArtifact(type) {
   modal.classList.add("visible");
 
   const titles = {
-    topography: "INFLUENCE TOPOGRAPHY",
-    constellation: "CLAN CONSTELLATIONS",
-    heatmap: "OPINION HEATMAP",
-    seismograph: "EVENT SEISMOGRAPH",
+    anatomies: "ANATOMIES OF AGENCY",
+    topography: "SURVEY OF INFLUENCE",
+    constellation: "CONSTELLATIONS OF CLAN",
+    heatmap: "FABRIC OF OPINION",
+    seismograph: "SEISMOGRAPH OF EVENTS",
   };
   document.getElementById("artifact-title").textContent = titles[type] || "ARTIFACT";
 
@@ -665,14 +666,17 @@ async function openArtifact(type) {
   const links = graphData.links;
 
   switch (type) {
+    case "anatomies":
+      Artifacts.renderAnatomies(nodes);
+      break;
     case "topography":
-      Artifacts.renderTopography(nodes, links);
+      Artifacts.renderTopography(nodes);
       break;
     case "constellation":
-      Artifacts.renderConstellation(nodes, links);
+      Artifacts.renderConstellation(nodes);
       break;
     case "heatmap":
-      Artifacts.renderHeatmap(nodes, links);
+      Artifacts.renderHeatmap(nodes);
       break;
     case "seismograph":
       Artifacts.renderSeismograph(nodes, links, eventHistory);
