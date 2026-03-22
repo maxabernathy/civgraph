@@ -17,6 +17,7 @@ from typing import Optional
 import networkx as nx
 
 from model import Agent, PoliticalLeaning, RelType, get_agent
+from capital import capital_field_relevance, habitus_reaction_modifier, habitus_affinity
 
 
 # ── Event types ──────────────────────────────────────────────────────────────
@@ -69,6 +70,30 @@ EVENT_TEMPLATES = {
         "topics": ["governance", "law"],
         "political_weight": 0.8,
         "clan_weight": 0.5,
+    },
+    "education_reform": {
+        "desc": "A major education reform is proposed",
+        "topics": ["education", "governance"],
+        "political_weight": 0.7,
+        "clan_weight": 0.3,
+    },
+    "housing_crisis": {
+        "desc": "Housing prices surge, displacing lower-income residents",
+        "topics": ["real_estate", "finance"],
+        "political_weight": 0.6,
+        "clan_weight": 0.4,
+    },
+    "cultural_event": {
+        "desc": "A prestigious cultural institution opens",
+        "topics": ["arts", "education"],
+        "political_weight": 0.2,
+        "clan_weight": 0.2,
+    },
+    "welfare_reform": {
+        "desc": "Changes to the social safety net are debated",
+        "topics": ["governance", "finance"],
+        "political_weight": 0.9,
+        "clan_weight": 0.3,
     },
     "custom": {
         "desc": "A custom event",
@@ -152,7 +177,8 @@ class Event:
 
 # ── Influence engine ─────────────────────────────────────────────────────────
 
-def _reaction_strength(agent: Agent, event: Event, edge_data: dict | None) -> float:
+def _reaction_strength(agent: Agent, event: Event, edge_data: dict | None,
+                       source_agent: Agent | None = None) -> float:
     """How strongly an agent reacts to an event. Can be negative (oppose)."""
     score = 0.0
 
@@ -177,16 +203,28 @@ def _reaction_strength(agent: Agent, event: Event, edge_data: dict | None) -> fl
     if event.target_district and agent.district == event.target_district:
         score += 0.2
 
-    # 6) Personality: assertive people react more
+    # 6) Capital field relevance — agents with relevant capital react stronger
+    field_rel = capital_field_relevance(agent.capital, event.topic)
+    score += 0.2 * field_rel
+
+    # 7) Personality: assertive people react more
     score *= (0.6 + 0.4 * agent.assertiveness)
 
-    # 7) Edge weight from whoever told them (trust channel)
+    # 8) Habitus disposition filter
+    hab_mod = habitus_reaction_modifier(agent.habitus, event.topic, event.sentiment)
+    score *= (0.7 + 0.3 * (hab_mod - 1.0) + 0.3)
+
+    # 9) Edge weight from whoever told them (trust channel)
     if edge_data:
         weight = edge_data.get("weight", 0.5)
         if weight < 0:  # rivalry — flip sentiment
             score *= -0.6
         else:
             score *= (0.6 + 0.4 * weight)
+        # Habitus affinity boost: similar dispositions amplify trust
+        if source_agent:
+            hab_aff = habitus_affinity(source_agent.habitus, agent.habitus)
+            score *= (1.0 + hab_aff * 0.2)
 
     return max(-1.0, min(1.0, score))
 
@@ -228,12 +266,14 @@ def propagate_event(G: nx.Graph, event: Event, max_steps: int = 6,
                 agent = get_agent(G, neighbor_id)
                 edge_data = G.edges[node_id, neighbor_id]
 
-                # compute reaction
-                reaction = _reaction_strength(agent, event, edge_data)
+                # compute reaction (with habitus-aware source context)
+                reaction = _reaction_strength(agent, event, edge_data, source_agent)
                 effective_delta = reaction * current_intensity
 
                 # openness modulates how much they actually shift
-                effective_delta *= agent.openness
+                # capital field relevance boosts openness for relevant topics
+                field_match = capital_field_relevance(agent.capital, event.topic)
+                effective_delta *= (agent.openness + field_match * 0.15)
 
                 # loyalty: if event targets their clan negatively, resist
                 if event.target_clan == agent.clan and event.sentiment < 0:
@@ -243,7 +283,9 @@ def propagate_event(G: nx.Graph, event: Event, max_steps: int = 6,
                 new_opinion = max(-1.0, min(1.0, old_opinion + effective_delta))
                 agent.opinion_state[event.topic] = new_opinion
 
-                activated = abs(effective_delta) >= activation_threshold
+                # Social capital lowers activation threshold (well-connected spread more)
+                personal_threshold = activation_threshold * (1 - agent.capital.social * 0.3)
+                activated = abs(effective_delta) >= personal_threshold
                 if activated:
                     next_frontier.add(neighbor_id)
                     event.affected_agents.add(neighbor_id)

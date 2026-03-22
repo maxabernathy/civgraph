@@ -60,6 +60,10 @@
     <div class="color-modes">
       <button class="btn active" data-mode="clan">Clan</button>
       <button class="btn" data-mode="politics">Politics</button>
+      <button class="btn" data-mode="class">Class</button>
+      <button class="btn" data-mode="capital">Capital</button>
+      <button class="btn" data-mode="age">Age</button>
+      <button class="btn" data-mode="education">Education</button>
       <button class="btn" data-mode="district">District</button>
       <button class="btn" data-mode="influence">Influence</button>
     </div>
@@ -81,6 +85,7 @@
       <button class="btn" data-artifact="constellation">Clan Constellations <span class="icon">&#10022;</span></button>
       <button class="btn" data-artifact="heatmap">Opinion Fabric <span class="icon">&#9632;</span></button>
       <button class="btn" data-artifact="seismograph">Event Seismograph <span class="icon">&#126;</span></button>
+      <button class="btn" data-artifact="citypulse">City Pulse <span class="icon">&#9729;</span></button>
     </div>
 
     <h2>Analysis</h2>
@@ -104,6 +109,19 @@
 
   <!-- Bottom panel -->
   <div id="bottom">
+    <div id="env-panel">
+      <h2>Environment <span id="env-year" style="color:var(--accent);float:right">Year 0</span></h2>
+      <div id="env-gauges"></div>
+      <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
+        <button class="btn btn-primary" id="btn-tick" style="flex:1">Advance 1 Year</button>
+        <select id="tick-years" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px;border-radius:3px;font-family:inherit;font-size:inherit">
+          <option value="1">1y</option>
+          <option value="3">3y</option>
+          <option value="5">5y</option>
+          <option value="10">10y</option>
+        </select>
+      </div>
+    </div>
     <div id="event-panel">
       <h2>Trigger Event</h2>
       <div class="event-form">
@@ -118,6 +136,10 @@
             <option value="festival">Festival</option>
             <option value="tech_boom">Tech Boom</option>
             <option value="policy_change">Policy Change</option>
+            <option value="education_reform">Education Reform</option>
+            <option value="housing_crisis">Housing Crisis</option>
+            <option value="cultural_event">Cultural Event</option>
+            <option value="welfare_reform">Welfare Reform</option>
             <option value="custom">Custom</option>
           </select>
         </div>
@@ -169,10 +191,11 @@
     <span id="artifact-title">ARTIFACT</span>
     <div class="controls">
       <select id="res-select">
-        <option value="1">1x (screen)</option>
-        <option value="2" selected>2x (print)</option>
-        <option value="4">4x (high-res)</option>
-        <option value="8">8x (poster)</option>
+        <option value="1">1x screen</option>
+        <option value="2" selected>2x print</option>
+        <option value="4">4x high-res</option>
+        <option value="a2">A2 landscape</option>
+        <option value="a2p">A2 portrait</option>
       </select>
       <button class="btn" id="btn-export-png">Export PNG</button>
       <button class="btn btn-primary" id="btn-export-pdf">Export PDF</button>
@@ -185,8 +208,8 @@
   <div id="artifact-meta"></div>
 </div>
 
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" integrity="sha384-5MXQT3yrGpx6/FO6Z5JlMsn1xsN/OggV+b88W2CfpNqmvPfmv7JW/O8x78GzptfE" crossorigin="anonymous"></script>
 <script src="/static/artifacts.js"></script>
 <script src="/static/app.js"></script>
 

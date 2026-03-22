@@ -15,6 +15,23 @@ let linkOpacity = 0.15;
 let ws = null;
 let eventHistory = [];  // local mirror of fired events
 
+// ── Security: HTML escaping ─────────────────────────────────────────────────
+
+const _escMap = {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+function esc(s) {
+  if (typeof s !== "string") return String(s);
+  return s.replace(/[&<>"']/g, c => _escMap[c]);
+}
+
+// Safe fetch wrapper — returns parsed JSON or null on error
+async function safeFetch(url, opts) {
+  try {
+    const r = await fetch(url, opts);
+    if (!r.ok) { console.error(`Fetch ${url}: ${r.status}`); return null; }
+    return await r.json();
+  } catch (e) { console.error(`Fetch ${url}:`, e); return null; }
+}
+
 // ── Color palettes ──────────────────────────────────────────────────────────
 
 const clanColors = d3.scaleOrdinal(d3.schemeTableau10.concat(d3.schemePastel1));
@@ -31,6 +48,16 @@ const politicsColors = {
 
 const districtColors = d3.scaleOrdinal(d3.schemeSet3);
 
+const classColors = {
+  lower: "#8b5e3c", lower_middle: "#a0845c", middle: "#94a3b8",
+  upper_middle: "#6b8bb5", upper: "#3a5a8c",
+};
+
+const phaseColors = {
+  education: "#93c5fd", early_career: "#6ee7b7", mid_career: "#fbbf24",
+  established: "#f87171", elder: "#a78bfa",
+};
+
 function nodeColor(d) {
   if (d.highlighted) return "#fff";
   switch (colorMode) {
@@ -42,6 +69,15 @@ function nodeColor(d) {
       return districtColors(d.district);
     case "influence":
       return d3.interpolateYlOrRd(d.influence);
+    case "class":
+      return classColors[d.social_class] || "#666";
+    case "capital":
+      return d3.interpolateViridis(d.capital_volume);
+    case "age":
+      return d3.interpolatePlasma((d.age - 18) / 57);
+    case "education":
+      const edColors = {vocational:"#d97706",applied:"#059669",academic:"#2563eb",elite:"#7c3aed"};
+      return edColors[d.education_track] || "#666";
     default:
       return "#4a9eff";
   }
@@ -96,6 +132,7 @@ async function init() {
   setupEvents();
   setupArtifacts();
   connectWebSocket();
+  loadEnvironment();
 
   document.getElementById("loading").classList.add("hidden");
 }
@@ -231,9 +268,9 @@ function drag(sim) {
 function showTooltip(event, d) {
   const tooltip = document.getElementById("tooltip");
   tooltip.innerHTML = `
-    <div class="name">${d.name}</div>
-    <div class="dim">${d.occupation.replace(/_/g, " ")} · ${d.district}</div>
-    <div>Clan: ${d.clan} · ${d.politics.replace(/_/g, " ")}</div>
+    <div class="name">${esc(d.name)}</div>
+    <div class="dim">${esc(d.occupation.replace(/_/g, " "))} · ${esc(d.district)}</div>
+    <div>Clan: ${esc(d.clan)} · ${esc(d.politics.replace(/_/g, " "))}</div>
     <div>Influence: ${(d.influence * 100).toFixed(0)}% · ${d.degree} connections</div>
   `;
   tooltip.classList.add("visible");
@@ -271,7 +308,7 @@ async function selectAgent(d) {
     .map(
       ([k, v]) =>
         `<div class="bar-row">
-        <span class="bar-label">${k}</span>
+        <span class="bar-label">${esc(k)}</span>
         <div class="bar-track">
           <div class="bar-fill ${v > 0 ? "positive" : v < 0 ? "negative" : "neutral"}"
                style="width:${Math.abs(v) * 100}%; margin-left:${v < 0 ? (100 - Math.abs(v) * 100) + "%" : "0"}"></div>
@@ -280,24 +317,42 @@ async function selectAgent(d) {
     )
     .join("");
 
+  const cap = agent.capital || {};
+  const hab = agent.habitus || {};
   document.getElementById("agent-detail").innerHTML = `
     <div class="agent-card">
-      <div class="name">${agent.name}</div>
+      <div class="name">${esc(agent.name)}</div>
       <div class="meta">
-        <span class="tag clan">${agent.clan}</span>
-        <span class="tag district">${agent.district}</span>
-        <span class="tag politics">${agent.politics.replace(/_/g, " ")}</span>
-        <br>${agent.occupation.replace(/_/g, " ")}
+        <span class="tag clan">${esc(agent.clan)}</span>
+        <span class="tag district">${esc(agent.district)}</span>
+        <span class="tag politics">${esc(agent.politics.replace(/_/g, " "))}</span>
+        <br>${esc(agent.occupation.replace(/_/g, " "))}
+        · age ${agent.age} · ${esc((agent.life_phase || "").replace(/_/g, " "))}
       </div>
-      <div class="meta" style="margin-top:8px">
-        <div class="bar-row"><span class="bar-label">Influence</span><div class="bar-track"><div class="bar-fill positive" style="width:${agent.influence * 100}%"></div></div></div>
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">CAPITAL</div>
+        <div class="bar-row"><span class="bar-label">Economic</span><div class="bar-track"><div class="bar-fill positive" style="width:${(cap.economic||0) * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Cultural</span><div class="bar-track"><div class="bar-fill" style="width:${(cap.cultural||0) * 100}%;background:#a78bfa"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Social</span><div class="bar-track"><div class="bar-fill" style="width:${(cap.social||0) * 100}%;background:#38bdf8"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Symbolic</span><div class="bar-track"><div class="bar-fill" style="width:${(cap.symbolic||0) * 100}%;background:#fbbf24"></div></div></div>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">HABITUS</div>
+        <div style="font-size:0.85em">
+          Class: ${esc((hab.current_class||"").replace(/_/g," "))}
+          (origin: ${esc((hab.origin_class||"").replace(/_/g," "))})
+          <br>Education: ${esc((hab.education_track||"").replace(/_/g," "))}
+          · Taste: ${(hab.cultural_taste||0) > 0 ? "legitimate" : "popular"} (${(hab.cultural_taste||0).toFixed(2)})
+        </div>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">PERSONALITY</div>
         <div class="bar-row"><span class="bar-label">Openness</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.openness * 100}%"></div></div></div>
         <div class="bar-row"><span class="bar-label">Assertive</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.assertiveness * 100}%"></div></div></div>
         <div class="bar-row"><span class="bar-label">Loyalty</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.loyalty * 100}%"></div></div></div>
-        <div class="bar-row"><span class="bar-label">Resources</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.resources * 100}%"></div></div></div>
       </div>
       <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
-        Interests: ${agent.interests.map((i) => i.replace(/_/g, " ")).join(", ")}
+        Interests: ${agent.interests.map((i) => esc(i.replace(/_/g, " "))).join(", ")}
       </div>
     </div>
 
@@ -310,14 +365,19 @@ async function selectAgent(d) {
         .slice(0, 30)
         .map(
           (n) =>
-            `<li onclick="selectAgentById('${n.id}')">
-              <span>${n.name}</span>
-              <span class="rel">${n.rel} (${n.weight > 0 ? "+" : ""}${n.weight.toFixed(2)})</span>
+            `<li data-agent-id="${esc(n.id)}">
+              <span>${esc(n.name)}</span>
+              <span class="rel">${esc(n.rel)} (${n.weight > 0 ? "+" : ""}${n.weight.toFixed(2)})</span>
             </li>`
         )
         .join("")}
     </ul>
   `;
+
+  // Event delegation for neighbor clicks (replaces inline onclick)
+  document.querySelectorAll("#agent-detail .neighbor-list li[data-agent-id]").forEach((li) => {
+    li.addEventListener("click", () => selectAgentById(li.dataset.agentId));
+  });
 
   document.getElementById("btn-fire-event").textContent = `Fire Event from ${agent.name}`;
 }
@@ -556,11 +616,11 @@ function addLogEntry(event) {
   const entry = document.createElement("div");
   entry.className = "log-entry";
   entry.innerHTML = `
-    <span class="time">${time}</span>
-    <span class="event-name"> ${event.title}</span>
+    <span class="time">${esc(time)}</span>
+    <span class="event-name"> ${esc(event.title)}</span>
     <div class="impact">
       ${event.total_affected} affected · ${event.steps} steps ·
-      topic: ${event.topic} · sentiment: ${event.sentiment.toFixed(1)}
+      topic: ${esc(event.topic)} · sentiment: ${event.sentiment.toFixed(1)}
     </div>
   `;
   log.prepend(entry);
@@ -581,14 +641,19 @@ async function findBridges() {
       ${bridges
         .map(
           (b) =>
-            `<li onclick="selectAgentById('${b.agent.id}')">
-              <span>${b.agent.name}</span>
-              <span class="rel">${b.agent.clan} (${b.betweenness})</span>
+            `<li data-agent-id="${esc(b.agent.id)}">
+              <span>${esc(b.agent.name)}</span>
+              <span class="rel">${esc(b.agent.clan)} (${b.betweenness})</span>
             </li>`
         )
         .join("")}
     </ul>
   `;
+
+  // Event delegation for bridge agent clicks
+  document.querySelectorAll("#agent-detail .neighbor-list li[data-agent-id]").forEach((li) => {
+    li.addEventListener("click", () => selectAgentById(li.dataset.agentId));
+  });
 }
 
 async function resetSimulation() {
@@ -651,6 +716,7 @@ async function openArtifact(type) {
     constellation: "CONSTELLATIONS OF CLAN",
     heatmap: "FABRIC OF OPINION",
     seismograph: "SEISMOGRAPH OF EVENTS",
+    citypulse: "PULSE OF THE CITY",
   };
   document.getElementById("artifact-title").textContent = titles[type] || "ARTIFACT";
 
@@ -680,6 +746,11 @@ async function openArtifact(type) {
       break;
     case "seismograph":
       Artifacts.renderSeismograph(nodes, links, eventHistory);
+      break;
+    case "citypulse":
+      const envHist = await fetch("/api/environment/history").then((r) => r.json());
+      const envMetaData = await fetch("/api/environment/meta").then((r) => r.json());
+      Artifacts.renderCityPulse(envHist, envMetaData);
       break;
   }
 }
@@ -712,6 +783,79 @@ function connectWebSocket() {
   };
 }
 
+// ── Environment ─────────────────────────────────────────────────────────────
+
+let envMeta = null;
+
+async function loadEnvironment() {
+  envMeta = await fetch("/api/environment/meta").then((r) => r.json());
+  const env = await fetch("/api/environment").then((r) => r.json());
+  renderEnvironment(env);
+
+  document.getElementById("btn-tick").addEventListener("click", advanceTick);
+}
+
+function renderEnvironment(env) {
+  document.getElementById("env-year").textContent = `Year ${env.year}`;
+  const container = document.getElementById("env-gauges");
+
+  if (!envMeta) return;
+  const domains = envMeta.domains;
+  const meta = envMeta.indicators;
+
+  const domainColors = {
+    economy: "#4ade80", housing: "#fbbf24", migration: "#60a5fa",
+    culture: "#a78bfa", governance: "#f87171",
+  };
+
+  let html = "";
+  for (const [domain, keys] of Object.entries(domains)) {
+    html += `<div class="env-domain-label">${esc(domain)}</div>`;
+    for (const key of keys) {
+      const m = meta[key];
+      if (!m) continue;
+      const val = env.indicators[key] || 0;
+      const lo = m.min, hi = m.max;
+      const pct = Math.max(0, Math.min(100, ((val - lo) / (hi - lo)) * 100));
+      let display = m.format === "pct" ? (val * 100).toFixed(1) + "%" :
+                    m.format === "index" ? val.toFixed(2) : val.toFixed(2);
+      const color = domainColors[domain] || "var(--accent)";
+      html += `<div class="env-gauge">
+        <span class="env-gauge-label">${esc(m.label)}</span>
+        <div class="env-gauge-track">
+          <div class="env-gauge-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <span class="env-gauge-val">${display}</span>
+      </div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+async function advanceTick() {
+  const years = parseInt(document.getElementById("tick-years").value) || 1;
+  const result = await fetch("/api/tick", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ years }),
+  }).then((r) => r.json());
+
+  if (result && result.current) {
+    renderEnvironment(result.current);
+  }
+  if (result && result.stats) {
+    updateStats(result.stats);
+  }
+
+  // Refresh graph data to reflect capital changes
+  graphData = await fetch("/api/graph").then((r) => r.json());
+  // Update node visuals without rebuilding simulation
+  nodeGroup.selectAll("circle")
+    .transition().duration(500)
+    .attr("fill", nodeColor)
+    .attr("r", nodeRadius);
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function updateStats(stats) {
@@ -728,4 +872,3 @@ function sleep(ms) {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 window.addEventListener("load", init);
-window.selectAgentById = selectAgentById;

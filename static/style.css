@@ -1,17 +1,17 @@
 /* CivGraph — Minimalist dark theme, responsive */
 
 :root {
-  --bg: #0a0a0f;
-  --surface: #12121a;
-  --border: #1e1e2e;
-  --text: #c8c8d4;
-  --text-dim: #6b6b7b;
-  --accent: #4a9eff;
-  --accent2: #ff6b6b;
-  --accent3: #6bffa1;
-  --positive: #4ade80;
-  --negative: #f87171;
-  --neutral: #94a3b8;
+  --bg: #080810;
+  --surface: #101018;
+  --border: #1a1a28;
+  --text: #c4c4d0;
+  --text-dim: #5e5e72;
+  --accent: #5a8fd4;
+  --accent2: #d46b6b;
+  --accent3: #5ad49a;
+  --positive: #5ad49a;
+  --negative: #d46b6b;
+  --neutral: #8895a7;
 
   /* Responsive scaling base */
   --sidebar-w: clamp(240px, 16vw, 360px);
@@ -54,11 +54,12 @@ header {
 }
 
 header h1 {
-  font-size: clamp(12px, 1vw, 16px);
-  font-weight: 600;
-  letter-spacing: 2px;
+  font-size: clamp(11px, 0.9vw, 14px);
+  font-weight: 400;
+  letter-spacing: 3px;
   text-transform: uppercase;
   color: var(--accent);
+  opacity: 0.85;
 }
 
 header .stats {
@@ -206,7 +207,7 @@ header .stats span {
 /* ── Graph canvas ───────────────────────────────── */
 
 #graph-container {
-  background: var(--bg);
+  background: radial-gradient(ellipse at 50% 45%, #0f0f1a 0%, var(--bg) 70%);
   position: relative;
   overflow: hidden;
 }
@@ -389,17 +390,17 @@ header .stats span {
   grid-column: 1 / -1;
   background: var(--surface);
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.1fr 1fr 0.8fr;
   gap: 1px;
   overflow: hidden;
 }
 
-#event-panel, #log-panel {
+#env-panel, #event-panel, #log-panel {
   padding: clamp(8px, 0.8vw, 16px);
   overflow-y: auto;
 }
 
-#event-panel h2, #log-panel h2 {
+#env-panel h2, #event-panel h2, #log-panel h2 {
   font-size: clamp(9px, 0.65vw, 12px);
   text-transform: uppercase;
   letter-spacing: 1.5px;
@@ -459,6 +460,62 @@ header .stats span {
 
 .log-entry .impact {
   font-size: 0.85em;
+}
+
+/* ── Environment gauges ─────────────────────────── */
+
+#env-gauges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+
+.env-domain-label {
+  grid-column: 1 / -1;
+  font-size: clamp(7px, 0.5vw, 9px);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  margin-bottom: 1px;
+}
+
+.env-gauge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: clamp(7px, 0.5vw, 9px);
+}
+
+.env-gauge-label {
+  width: clamp(50px, 5vw, 80px);
+  text-align: right;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.env-gauge-track {
+  flex: 1;
+  height: 5px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.env-gauge-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+
+.env-gauge-val {
+  width: 32px;
+  text-align: right;
+  color: var(--text-dim);
+  font-size: 0.9em;
 }
 
 /* ── Scrollbar ──────────────────────────────────── */

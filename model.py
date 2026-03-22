@@ -2,7 +2,8 @@
 CivGraph — Agent-based modeling on a social graph.
 
 Core model: 500 individuals in a mid-scale city, each with clan ties,
-interests, political leanings, and influence relationships.
+interests, political leanings, Bourdieusian capital, habitus, and
+lifecycle-dependent influence relationships.
 """
 
 from __future__ import annotations
@@ -15,6 +16,14 @@ from enum import Enum
 from typing import Optional
 
 import networkx as nx
+
+from capital import (
+    Capital, Habitus, SocialClass, EducationTrack, LifePhase,
+    EU_CONFIG, life_phase_from_age, generate_age, generate_capital,
+    generate_habitus, pick_education, pick_class, habitus_affinity,
+    capital_to_influence, transmit_economic, transmit_cultural,
+    transmit_symbolic, inherit_habitus,
+)
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -43,6 +52,15 @@ DISTRICTS = [
     "Downtown", "Northside", "Riverside", "Old Quarter", "Tech Park",
     "Eastgate", "Harbor", "University Hill", "Midtown", "Southfield",
 ]
+
+# Each clan has a "class center" — some clans trend upper, some lower
+CLAN_CLASS_CENTERS = {
+    "Delacroix": 3.8, "Ashworth": 3.5, "Kaplan": 3.3, "Moreau": 3.2,
+    "Harmon": 2.8, "Nakamura": 2.7, "Lindqvist": 2.6, "Strand": 2.5,
+    "Voss": 2.3, "Xu": 2.3, "Takahashi": 2.2, "Bassi": 2.1,
+    "Brennan": 2.0, "Ferreira": 1.9, "Okafor": 1.8, "Al-Rashid": 1.7,
+    "Petrov": 1.6, "Reyes": 1.4, "Mbeki": 1.3, "Kowalski": 1.1,
+}
 
 
 class PoliticalLeaning(str, Enum):
@@ -81,13 +99,24 @@ class Agent:
     occupation: str
     interests: list[str]
     politics: PoliticalLeaning
-    influence: float          # 0-1
-    openness: float           # 0-1, how easily swayed
-    assertiveness: float      # 0-1, how strongly they push views
-    loyalty: float            # 0-1, clan loyalty
-    resources: float          # 0-1, economic/social capital
+    age: int
+    life_phase: LifePhase
+    capital: Capital
+    habitus: Habitus
+    openness: float
+    assertiveness: float
+    loyalty: float
+    generation: int = 0
+    parent_id: str | None = None
     opinion_state: dict[str, float] = field(default_factory=dict)
-    # opinion_state: topic -> sentiment (-1 to 1)
+
+    @property
+    def influence(self) -> float:
+        return capital_to_influence(self.capital)
+
+    @property
+    def resources(self) -> float:
+        return self.capital.economic
 
     def to_dict(self) -> dict:
         return {
@@ -98,11 +127,17 @@ class Agent:
             "occupation": self.occupation,
             "interests": self.interests,
             "politics": self.politics.value,
+            "age": self.age,
+            "life_phase": self.life_phase.value,
             "influence": round(self.influence, 3),
             "openness": round(self.openness, 3),
             "assertiveness": round(self.assertiveness, 3),
             "loyalty": round(self.loyalty, 3),
             "resources": round(self.resources, 3),
+            "capital": self.capital.to_dict(),
+            "habitus": self.habitus.to_dict(),
+            "generation": self.generation,
+            "parent_id": self.parent_id,
             "opinion_state": {k: round(v, 3) for k, v in self.opinion_state.items()},
         }
 
@@ -116,6 +151,7 @@ class RelType(str, Enum):
     DISTRICT = "district"
     FRIENDSHIP = "friendship"
     RIVALRY = "rivalry"
+    HABITUS = "habitus"
 
 
 # ── City Generator ───────────────────────────────────────────────────────────
@@ -123,7 +159,7 @@ class RelType(str, Enum):
 FIRST_NAMES = [
     "James", "Maria", "Chen", "Aisha", "Dmitri", "Yuki", "Carlos", "Ingrid",
     "David", "Fatima", "Liam", "Priya", "Omar", "Sofia", "Kai", "Elena",
-    "Tomás", "Amara", "Henrik", "Mei", "Ravi", "Clara", "André", "Hana",
+    "Tomas", "Amara", "Henrik", "Mei", "Ravi", "Clara", "Andre", "Hana",
     "Erik", "Zara", "Leo", "Nadia", "Finn", "Isla", "Marco", "Lena",
     "Sven", "Rosa", "Amir", "Vera", "Hugo", "Anya", "Samir", "Freya",
     "Dante", "Mila", "Oscar", "Layla", "Ivan", "Sara", "Noah", "Dina",
@@ -133,164 +169,226 @@ FIRST_NAMES = [
 
 def generate_city(n: int = 500, seed: int | None = None) -> nx.Graph:
     """Build a social graph of *n* influential people in a mid-scale city."""
+    rng = random.Random(seed)
+    # Also seed the module-level random for libraries that use it
     if seed is not None:
         random.seed(seed)
 
     G = nx.Graph()
 
     # ── assign clans with power-law sizes ────────────────────────────────
-    clan_weights = [random.paretovariate(1.5) for _ in CLAN_NAMES]
+    clan_weights = [rng.paretovariate(1.5) for _ in CLAN_NAMES]
     total = sum(clan_weights)
     clan_sizes = [max(5, int(w / total * n)) for w in clan_weights]
-    # adjust to hit exactly n
     diff = n - sum(clan_sizes)
     for i in range(abs(diff)):
         idx = i % len(clan_sizes)
-        clan_sizes[idx] += 1 if diff > 0 else -1
+        clan_sizes[idx] += 1 if diff > 0 else (-1 if clan_sizes[idx] > 5 else 0)
 
     agents: list[Agent] = []
-    idx = 0
+    clan_pol_cache: dict[str, float] = {}
+
     for ci, clan in enumerate(CLAN_NAMES):
-        clan_district = random.choice(DISTRICTS)  # clan home base
+        clan_district = rng.choice(DISTRICTS)
+        clan_class_center = CLAN_CLASS_CENTERS.get(clan, 2.0)
+
+        # Clan political tendency (set once per clan)
+        clan_pol = max(-3, min(3, rng.gauss(0, 1.5)))
+        clan_pol_cache[clan] = clan_pol
+
         for j in range(clan_sizes[ci]):
-            # district: 60% chance home base, 40% elsewhere
-            district = clan_district if random.random() < 0.6 else random.choice(DISTRICTS)
-            pol_center = random.gauss(0, 1.5)
-            pol_center = max(-3, min(3, pol_center))
+            # District
+            district = clan_district if rng.random() < 0.6 else rng.choice(DISTRICTS)
 
-            # clan members share political tendency (with noise)
-            if j == 0:
-                clan_pol = pol_center
-            pol = max(-3, min(3, clan_pol + random.gauss(0, 0.8)))
+            # Politics (clan-correlated + noise)
+            pol = max(-3, min(3, clan_pol + rng.gauss(0, 0.8)))
 
-            n_interests = random.randint(1, 4)
-            interests = random.sample(INTEREST_POOL, n_interests)
+            # Interests
+            n_interests = rng.randint(1, 4)
+            interests = rng.sample(INTEREST_POOL, n_interests)
 
-            # influence follows power law within clan
-            raw_inf = random.paretovariate(2.0)
-            influence = min(1.0, raw_inf / 5.0)
+            # Age and lifecycle
+            age = generate_age(rng)
+            life_phase = life_phase_from_age(age)
 
-            first = random.choice(FIRST_NAMES)
+            # Social class (clan-correlated)
+            origin_class = pick_class(clan_class_center, rng)
+            education_track = pick_education(origin_class, rng)
+
+            # Habitus
+            habitus = generate_habitus(origin_class, education_track, age, rng)
+
+            # Capital
+            capital = generate_capital(origin_class, education_track, age, rng)
+
+            # Personality traits
+            openness = rng.betavariate(2, 5)
+            assertiveness = rng.betavariate(2, 3)
+            loyalty = rng.betavariate(3, 2)
+
+            first = rng.choice(FIRST_NAMES)
             agent = Agent(
-                id=str(uuid.uuid4())[:8],
+                id=str(uuid.uuid4())[:12],
                 name=f"{first} {clan}",
                 clan=clan,
                 district=district,
-                occupation=random.choice(OCCUPATIONS),
+                occupation=rng.choice(OCCUPATIONS),
                 interests=interests,
                 politics=PoliticalLeaning.from_numeric(pol),
-                influence=influence,
-                openness=random.betavariate(2, 5),       # most people moderately open
-                assertiveness=random.betavariate(2, 3),
-                loyalty=random.betavariate(3, 2),         # skewed toward loyal
-                resources=random.betavariate(2, 5) * influence + random.random() * 0.3,
+                age=age,
+                life_phase=life_phase,
+                capital=capital,
+                habitus=habitus,
+                openness=openness,
+                assertiveness=assertiveness,
+                loyalty=loyalty,
             )
             agents.append(agent)
             G.add_node(agent.id, agent=agent)
-            idx += 1
 
-    # ── edges ────────────────────────────────────────────────────────────
-    agent_map: dict[str, Agent] = {a.id: a for a in agents}
-
-    # 1) Clan bonds — everyone in same clan knows each other (small-world)
+    # ── Assign parent-child within clans ─────────────────────────────────
     by_clan: dict[str, list[Agent]] = {}
     for a in agents:
         by_clan.setdefault(a.clan, []).append(a)
 
     for clan, members in by_clan.items():
-        # ring lattice within clan + random shortcuts
+        elders = [m for m in members if m.age >= 45]
+        young = [m for m in members if m.age < 30]
+        for child in young:
+            if elders and rng.random() < 0.7:
+                parent = rng.choice(elders)
+                child.parent_id = parent.id
+                child.generation = parent.generation + 1
+                # Intergenerational transmission
+                child.capital.economic = max(
+                    child.capital.economic,
+                    transmit_economic(parent.capital.economic, rng)
+                )
+                child.capital.cultural = max(
+                    child.capital.cultural,
+                    transmit_cultural(parent.capital, parent.habitus, rng)
+                )
+                clan_avg_sym = sum(m.capital.symbolic for m in members) / len(members)
+                child.capital.symbolic = max(
+                    child.capital.symbolic,
+                    transmit_symbolic(parent.capital.symbolic, clan_avg_sym, rng)
+                )
+                child.habitus = inherit_habitus(
+                    parent.habitus, child.habitus.current_class,
+                    child.habitus.education_track, rng
+                )
+                child.capital.clamp()
+
+    # ── edges ────────────────────────────────────────────────────────────
+    # 1) Clan bonds (small-world ring + shortcuts)
+    for clan, members in by_clan.items():
         for i, a in enumerate(members):
-            # connect to 2 nearest neighbors on ring
             for d in (1, 2):
                 b = members[(i + d) % len(members)]
                 if a.id != b.id:
                     w = 0.5 + 0.5 * min(a.loyalty, b.loyalty)
-                    G.add_edge(a.id, b.id, weight=round(w, 3),
-                               rel=RelType.CLAN.value)
-            # random clan shortcut (30%)
-            if random.random() < 0.3:
-                b = random.choice(members)
+                    G.add_edge(a.id, b.id, weight=round(w, 3), rel=RelType.CLAN.value)
+            if rng.random() < 0.3:
+                b = rng.choice(members)
                 if a.id != b.id and not G.has_edge(a.id, b.id):
-                    G.add_edge(a.id, b.id, weight=round(0.3 + random.random() * 0.4, 3),
+                    G.add_edge(a.id, b.id, weight=round(0.3 + rng.random() * 0.4, 3),
                                rel=RelType.CLAN.value)
 
     # 2) District neighbors
     by_district: dict[str, list[Agent]] = {}
     for a in agents:
         by_district.setdefault(a.district, []).append(a)
-
     for district, members in by_district.items():
         for a in members:
-            n_neighbors = random.randint(1, 3)
-            targets = random.sample(members, min(n_neighbors, len(members)))
+            n_neighbors = rng.randint(1, 3)
+            targets = rng.sample(members, min(n_neighbors, len(members)))
             for b in targets:
                 if a.id != b.id and not G.has_edge(a.id, b.id):
-                    w = 0.2 + random.random() * 0.3
-                    G.add_edge(a.id, b.id, weight=round(w, 3),
-                               rel=RelType.DISTRICT.value)
+                    w = 0.2 + rng.random() * 0.3
+                    G.add_edge(a.id, b.id, weight=round(w, 3), rel=RelType.DISTRICT.value)
 
-    # 3) Professional ties — same occupation
+    # 3) Professional ties
     by_occ: dict[str, list[Agent]] = {}
     for a in agents:
         by_occ.setdefault(a.occupation, []).append(a)
-
     for occ, members in by_occ.items():
         for a in members:
-            if random.random() < 0.4:
-                b = random.choice(members)
+            if rng.random() < 0.4:
+                b = rng.choice(members)
                 if a.id != b.id and not G.has_edge(a.id, b.id):
-                    w = 0.3 + random.random() * 0.3
-                    G.add_edge(a.id, b.id, weight=round(w, 3),
-                               rel=RelType.PROFESSIONAL.value)
+                    w = 0.3 + rng.random() * 0.3
+                    G.add_edge(a.id, b.id, weight=round(w, 3), rel=RelType.PROFESSIONAL.value)
 
-    # 4) Political alliances — similar politics
+    # 4) Political alliances
     for a in agents:
-        if random.random() < 0.15:
+        if rng.random() < 0.15:
             candidates = [b for b in agents
                           if b.id != a.id
                           and abs(a.politics.numeric - b.politics.numeric) <= 1
                           and not G.has_edge(a.id, b.id)]
             if candidates:
-                b = random.choice(candidates)
-                w = 0.3 + random.random() * 0.4
-                G.add_edge(a.id, b.id, weight=round(w, 3),
-                           rel=RelType.POLITICAL.value)
+                b = rng.choice(candidates)
+                w = 0.3 + rng.random() * 0.4
+                G.add_edge(a.id, b.id, weight=round(w, 3), rel=RelType.POLITICAL.value)
 
     # 5) Shared-interest friendships
     for a in agents:
-        if random.random() < 0.2:
+        if rng.random() < 0.2:
             candidates = [b for b in agents
                           if b.id != a.id
                           and set(a.interests) & set(b.interests)
                           and not G.has_edge(a.id, b.id)]
             if candidates:
-                b = random.choice(candidates)
+                b = rng.choice(candidates)
                 overlap = len(set(a.interests) & set(b.interests))
                 w = 0.2 + 0.15 * overlap
-                G.add_edge(a.id, b.id, weight=round(w, 3),
-                           rel=RelType.FRIENDSHIP.value)
+                G.add_edge(a.id, b.id, weight=round(w, 3), rel=RelType.FRIENDSHIP.value)
 
-    # 6) Rivalries — cross-clan, similar influence, different politics
+    # 6) Rivalries
     for a in agents:
-        if random.random() < 0.05:
+        if rng.random() < 0.05:
             candidates = [b for b in agents
                           if b.clan != a.clan
                           and abs(a.influence - b.influence) < 0.15
                           and abs(a.politics.numeric - b.politics.numeric) >= 3
                           and not G.has_edge(a.id, b.id)]
             if candidates:
-                b = random.choice(candidates)
-                G.add_edge(a.id, b.id, weight=round(-0.3 - random.random() * 0.5, 3),
+                b = rng.choice(candidates)
+                G.add_edge(a.id, b.id, weight=round(-0.3 - rng.random() * 0.5, 3),
                            rel=RelType.RIVALRY.value)
 
-    # 7) Hub connectors — top influencers connect across clans
+    # 7) Hub connectors
     top = sorted(agents, key=lambda a: a.influence, reverse=True)[:30]
     for i, a in enumerate(top):
         for b in top[i + 1:]:
-            if random.random() < 0.25 and not G.has_edge(a.id, b.id):
-                w = 0.4 + random.random() * 0.4
-                G.add_edge(a.id, b.id, weight=round(w, 3),
-                           rel=RelType.PROFESSIONAL.value)
+            if rng.random() < 0.25 and not G.has_edge(a.id, b.id):
+                w = 0.4 + rng.random() * 0.4
+                G.add_edge(a.id, b.id, weight=round(w, 3), rel=RelType.PROFESSIONAL.value)
+
+    # 8) Habitus affinity ties — cross-clan bonds between similar dispositions
+    for i, a in enumerate(agents):
+        if rng.random() < 0.12:
+            best_aff = 0
+            best_b = None
+            # Sample 20 random candidates (avoid full O(n^2))
+            sample = rng.sample(agents, min(20, len(agents)))
+            for b in sample:
+                if b.id == a.id or b.clan == a.clan or G.has_edge(a.id, b.id):
+                    continue
+                aff = habitus_affinity(a.habitus, b.habitus)
+                if aff > best_aff and aff > 0.55:
+                    best_aff = aff
+                    best_b = b
+            if best_b:
+                w = 0.3 + best_aff * 0.4
+                G.add_edge(a.id, best_b.id, weight=round(w, 3), rel=RelType.HABITUS.value)
+
+    # ── Recompute social capital from actual graph degree ────────────────
+    for n_id in G.nodes:
+        agent = G.nodes[n_id]["agent"]
+        degree = G.degree(n_id)
+        agent.capital.social = min(1.0, 0.1 + math.sqrt(degree) / 8)
+        agent.capital.clamp()
 
     return G
 
@@ -306,10 +404,23 @@ def graph_stats(G: nx.Graph) -> dict:
     clans = {}
     districts = {}
     politics = {}
+    classes = {}
+    phases = {}
     for a in agents:
         clans[a.clan] = clans.get(a.clan, 0) + 1
         districts[a.district] = districts.get(a.district, 0) + 1
         politics[a.politics.value] = politics.get(a.politics.value, 0) + 1
+        classes[a.habitus.current_class.value] = classes.get(a.habitus.current_class.value, 0) + 1
+        phases[a.life_phase.value] = phases.get(a.life_phase.value, 0) + 1
+
+    # Capital averages
+    n_agents = len(agents) or 1
+    avg_capital = {
+        "economic": round(sum(a.capital.economic for a in agents) / n_agents, 3),
+        "cultural": round(sum(a.capital.cultural for a in agents) / n_agents, 3),
+        "social": round(sum(a.capital.social for a in agents) / n_agents, 3),
+        "symbolic": round(sum(a.capital.symbolic for a in agents) / n_agents, 3),
+    }
 
     return {
         "nodes": G.number_of_nodes(),
@@ -320,6 +431,9 @@ def graph_stats(G: nx.Graph) -> dict:
         "clans": clans,
         "districts": districts,
         "politics": politics,
+        "classes": classes,
+        "life_phases": phases,
+        "avg_capital": avg_capital,
     }
 
 
@@ -338,6 +452,12 @@ def export_for_d3(G: nx.Graph, highlight: set[str] | None = None) -> dict:
             "influence": a.influence,
             "interests": a.interests,
             "resources": a.resources,
+            "age": a.age,
+            "life_phase": a.life_phase.value,
+            "social_class": a.habitus.current_class.value,
+            "education_track": a.habitus.education_track.value,
+            "capital_volume": round(a.capital.total_volume, 3),
+            "capital": a.capital.to_dict(),
             "highlighted": n in (highlight or set()),
             "degree": G.degree(n),
         })
