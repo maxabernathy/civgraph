@@ -109,6 +109,9 @@ class Agent:
     generation: int = 0
     parent_id: str | None = None
     opinion_state: dict[str, float] = field(default_factory=dict)
+    norms: dict[str, float] = field(default_factory=dict)
+    satisfaction: float = 1.0
+    emergence_score: float = 0.0
 
     @property
     def influence(self) -> float:
@@ -139,6 +142,9 @@ class Agent:
             "generation": self.generation,
             "parent_id": self.parent_id,
             "opinion_state": {k: round(v, 3) for k, v in self.opinion_state.items()},
+            "norms": {k: round(v, 3) for k, v in self.norms.items()},
+            "satisfaction": round(self.satisfaction, 3),
+            "emergence_score": round(self.emergence_score, 3),
         }
 
 
@@ -460,6 +466,9 @@ def export_for_d3(G: nx.Graph, highlight: set[str] | None = None) -> dict:
             "capital": a.capital.to_dict(),
             "highlighted": n in (highlight or set()),
             "degree": G.degree(n),
+            "satisfaction": round(a.satisfaction, 3),
+            "emergence_score": round(a.emergence_score, 3),
+            "norm_count": len(a.norms),
         })
 
     links = []

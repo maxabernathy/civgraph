@@ -66,6 +66,7 @@
       <button class="btn" data-mode="education">Education</button>
       <button class="btn" data-mode="district">District</button>
       <button class="btn" data-mode="influence">Influence</button>
+      <button class="btn" data-mode="emergence">Emergence</button>
     </div>
 
     <h2>Display</h2>
@@ -86,6 +87,7 @@
       <button class="btn" data-artifact="heatmap">Opinion Fabric <span class="icon">&#9632;</span></button>
       <button class="btn" data-artifact="seismograph">Event Seismograph <span class="icon">&#126;</span></button>
       <button class="btn" data-artifact="citypulse">City Pulse <span class="icon">&#9729;</span></button>
+      <button class="btn" data-artifact="emergence">Emergence <span class="icon">&#9670;</span></button>
     </div>
 
     <h2>Analysis</h2>
@@ -112,6 +114,13 @@
     <div id="env-panel">
       <h2>Environment <span id="env-year" style="color:var(--accent);float:right">Year 0</span></h2>
       <div id="env-gauges"></div>
+      <div id="emergence-panel">
+        <div class="emergence-header">
+          <span class="emergence-title">Emergence</span>
+          <span id="emergence-status" class="emergence-status"></span>
+        </div>
+        <div id="emergence-gauges"><span class="emergence-placeholder">Advance simulation to compute</span></div>
+      </div>
       <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
         <button class="btn btn-primary" id="btn-tick" style="flex:1">Advance 1 Year</button>
         <select id="tick-years" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px;border-radius:3px;font-family:inherit;font-size:inherit">
