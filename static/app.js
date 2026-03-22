@@ -1,0 +1,612 @@
+/**
+ * CivGraph — D3.js force-directed graph visualization
+ *
+ * Minimalist, interactive agent-based modeling visualization.
+ */
+
+// ── State ───────────────────────────────────────────────────────────────────
+
+let graphData = null;
+let simulation = null;
+let selectedNode = null;
+let colorMode = "clan";
+let nodeSizeMultiplier = 1.0;
+let linkOpacity = 0.15;
+let ws = null;
+
+// ── Color palettes ──────────────────────────────────────────────────────────
+
+const clanColors = d3.scaleOrdinal(d3.schemeTableau10.concat(d3.schemePastel1));
+
+const politicsColors = {
+  far_left: "#dc2626",
+  left: "#ef4444",
+  center_left: "#fb923c",
+  center: "#94a3b8",
+  center_right: "#60a5fa",
+  right: "#3b82f6",
+  far_right: "#1d4ed8",
+};
+
+const districtColors = d3.scaleOrdinal(d3.schemeSet3);
+
+function nodeColor(d) {
+  if (d.highlighted) return "#fff";
+  switch (colorMode) {
+    case "clan":
+      return clanColors(d.clan);
+    case "politics":
+      return politicsColors[d.politics] || "#666";
+    case "district":
+      return districtColors(d.district);
+    case "influence":
+      return d3.interpolateYlOrRd(d.influence);
+    default:
+      return "#4a9eff";
+  }
+}
+
+function nodeRadius(d) {
+  const base = 2 + Math.sqrt(d.influence) * 6 + Math.sqrt(d.degree) * 0.8;
+  return base * nodeSizeMultiplier;
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+async function init() {
+  // Populate dropdowns
+  const meta = await fetch("/api/meta").then((r) => r.json());
+  const topicSelect = document.getElementById("event-topic");
+  meta.interests.forEach((t) => {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t.replace(/_/g, " ");
+    topicSelect.appendChild(opt);
+  });
+  // Add governance/trust/power topics
+  ["governance", "trust", "power"].forEach((t) => {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    topicSelect.appendChild(opt);
+  });
+
+  const clanSelect = document.getElementById("filter-clan");
+  meta.clans.forEach((c) => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = c;
+    clanSelect.appendChild(opt);
+  });
+
+  const districtSelect = document.getElementById("filter-district");
+  meta.districts.forEach((d) => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d;
+    districtSelect.appendChild(opt);
+  });
+
+  // Load graph
+  graphData = await fetch("/api/graph").then((r) => r.json());
+  const stats = await fetch("/api/stats").then((r) => r.json());
+  updateStats(stats);
+
+  buildGraph();
+  setupEvents();
+  connectWebSocket();
+
+  document.getElementById("loading").classList.add("hidden");
+}
+
+// ── D3 Force Graph ──────────────────────────────────────────────────────────
+
+let svg, g, linkGroup, nodeGroup, zoomBehavior;
+
+function buildGraph() {
+  const container = document.getElementById("graph-container");
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+
+  svg = d3.select("#graph-svg").attr("viewBox", [0, 0, width, height]);
+  svg.selectAll("*").remove();
+
+  // Zoom
+  zoomBehavior = d3
+    .zoom()
+    .scaleExtent([0.1, 8])
+    .on("zoom", (event) => {
+      g.attr("transform", event.transform);
+    });
+  svg.call(zoomBehavior);
+
+  g = svg.append("g");
+  linkGroup = g.append("g").attr("class", "links");
+  nodeGroup = g.append("g").attr("class", "nodes");
+
+  // Force simulation
+  simulation = d3
+    .forceSimulation(graphData.nodes)
+    .force(
+      "link",
+      d3
+        .forceLink(graphData.links)
+        .id((d) => d.id)
+        .distance((d) => {
+          const w = Math.abs(d.weight);
+          return 40 + (1 - w) * 80;
+        })
+        .strength((d) => Math.abs(d.weight) * 0.3)
+    )
+    .force("charge", d3.forceManyBody().strength(-30).distanceMax(300))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collision", d3.forceCollide().radius((d) => nodeRadius(d) + 1))
+    .alphaDecay(0.02)
+    .on("tick", ticked);
+
+  renderLinks();
+  renderNodes();
+}
+
+function renderLinks() {
+  const link = linkGroup
+    .selectAll("line")
+    .data(graphData.links, (d) => d.source.id + "-" + d.target.id);
+
+  link.exit().remove();
+
+  link
+    .enter()
+    .append("line")
+    .attr("class", (d) => "link" + (d.rel === "rivalry" ? " rivalry" : ""))
+    .attr("stroke", (d) => {
+      if (d.weight < 0) return "#f87171";
+      return "#4a9eff";
+    })
+    .attr("stroke-width", (d) => Math.max(0.5, Math.abs(d.weight) * 2))
+    .attr("stroke-opacity", linkOpacity);
+}
+
+function renderNodes() {
+  const node = nodeGroup
+    .selectAll("g.node")
+    .data(graphData.nodes, (d) => d.id);
+
+  node.exit().remove();
+
+  const enter = node.enter().append("g").attr("class", "node");
+
+  enter
+    .append("circle")
+    .attr("r", nodeRadius)
+    .attr("fill", nodeColor)
+    .attr("stroke", (d) => d3.color(nodeColor(d)).darker(0.5))
+    .on("click", (event, d) => selectAgent(d))
+    .on("mouseover", (event, d) => showTooltip(event, d))
+    .on("mouseout", hideTooltip)
+    .call(drag(simulation));
+
+  node.select("circle").attr("r", nodeRadius).attr("fill", nodeColor);
+}
+
+function ticked() {
+  linkGroup
+    .selectAll("line")
+    .attr("x1", (d) => d.source.x)
+    .attr("y1", (d) => d.source.y)
+    .attr("x2", (d) => d.target.x)
+    .attr("y2", (d) => d.target.y);
+
+  nodeGroup
+    .selectAll("g.node")
+    .attr("transform", (d) => `translate(${d.x},${d.y})`);
+}
+
+function drag(sim) {
+  return d3
+    .drag()
+    .on("start", (event, d) => {
+      if (!event.active) sim.alphaTarget(0.1).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    })
+    .on("drag", (event, d) => {
+      d.fx = event.x;
+      d.fy = event.y;
+    })
+    .on("end", (event, d) => {
+      if (!event.active) sim.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    });
+}
+
+// ── Tooltip ─────────────────────────────────────────────────────────────────
+
+function showTooltip(event, d) {
+  const tooltip = document.getElementById("tooltip");
+  tooltip.innerHTML = `
+    <div class="name">${d.name}</div>
+    <div class="dim">${d.occupation.replace(/_/g, " ")} · ${d.district}</div>
+    <div>Clan: ${d.clan} · ${d.politics.replace(/_/g, " ")}</div>
+    <div>Influence: ${(d.influence * 100).toFixed(0)}% · ${d.degree} connections</div>
+  `;
+  tooltip.classList.add("visible");
+
+  const rect = document
+    .getElementById("graph-container")
+    .getBoundingClientRect();
+  tooltip.style.left = event.clientX - rect.left + 12 + "px";
+  tooltip.style.top = event.clientY - rect.top - 10 + "px";
+}
+
+function hideTooltip() {
+  document.getElementById("tooltip").classList.remove("visible");
+}
+
+// ── Agent selection ─────────────────────────────────────────────────────────
+
+async function selectAgent(d) {
+  selectedNode = d;
+
+  // Highlight node and neighbors
+  const detail = await fetch(`/api/agent/${d.id}`).then((r) => r.json());
+  const neighborIds = new Set(detail.neighbors.map((n) => n.id));
+  neighborIds.add(d.id);
+
+  nodeGroup.selectAll("g.node").classed("highlighted", (n) => neighborIds.has(n.id));
+
+  linkGroup.selectAll("line").classed("highlighted", (l) => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    return (sid === d.id || tid === d.id);
+  });
+
+  // Update detail panel
+  const agent = detail.agent;
+  const opinions = Object.entries(agent.opinion_state)
+    .map(
+      ([k, v]) =>
+        `<div class="bar-row">
+        <span class="bar-label">${k}</span>
+        <div class="bar-track">
+          <div class="bar-fill ${v > 0 ? "positive" : v < 0 ? "negative" : "neutral"}"
+               style="width:${Math.abs(v) * 100}%; margin-left:${v < 0 ? (100 - Math.abs(v) * 100) + "%" : "0"}"></div>
+        </div>
+      </div>`
+    )
+    .join("");
+
+  document.getElementById("agent-detail").innerHTML = `
+    <div class="agent-card">
+      <div class="name">${agent.name}</div>
+      <div class="meta">
+        <span class="tag clan">${agent.clan}</span>
+        <span class="tag district">${agent.district}</span>
+        <span class="tag politics">${agent.politics.replace(/_/g, " ")}</span>
+        <br>${agent.occupation.replace(/_/g, " ")}
+      </div>
+      <div class="meta" style="margin-top:8px">
+        <div class="bar-row"><span class="bar-label">Influence</span><div class="bar-track"><div class="bar-fill positive" style="width:${agent.influence * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Openness</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.openness * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Assertive</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.assertiveness * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Loyalty</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.loyalty * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Resources</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.resources * 100}%"></div></div></div>
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text-dim)">
+        Interests: ${agent.interests.map((i) => i.replace(/_/g, " ")).join(", ")}
+      </div>
+    </div>
+
+    ${opinions ? `<h2>Opinions</h2>${opinions}` : ""}
+
+    <h2>Connections (${detail.neighbors.length})</h2>
+    <ul class="neighbor-list">
+      ${detail.neighbors
+        .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
+        .slice(0, 30)
+        .map(
+          (n) =>
+            `<li onclick="selectAgentById('${n.id}')">
+              <span>${n.name}</span>
+              <span class="rel">${n.rel} (${n.weight > 0 ? "+" : ""}${n.weight.toFixed(2)})</span>
+            </li>`
+        )
+        .join("")}
+    </ul>
+  `;
+
+  // Update fire event button
+  document.getElementById("btn-fire-event").textContent = `Fire Event from ${agent.name}`;
+}
+
+function selectAgentById(id) {
+  const node = graphData.nodes.find((n) => n.id === id);
+  if (node) selectAgent(node);
+}
+
+// ── Filters ─────────────────────────────────────────────────────────────────
+
+function applyFilters() {
+  const search = document.getElementById("filter-search").value.toLowerCase();
+  const clan = document.getElementById("filter-clan").value;
+  const district = document.getElementById("filter-district").value;
+  const politics = document.getElementById("filter-politics").value;
+
+  nodeGroup.selectAll("g.node").each(function (d) {
+    let visible = true;
+    if (search && !d.name.toLowerCase().includes(search)) visible = false;
+    if (clan && d.clan !== clan) visible = false;
+    if (district && d.district !== district) visible = false;
+    if (politics && d.politics !== politics) visible = false;
+
+    d3.select(this).style("opacity", visible ? 1 : 0.05);
+  });
+
+  // Dim links connected to hidden nodes
+  linkGroup.selectAll("line").style("opacity", function (l) {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    const sn = graphData.nodes.find((n) => n.id === sid);
+    const tn = graphData.nodes.find((n) => n.id === tid);
+    if (!sn || !tn) return linkOpacity;
+    let sv = true,
+      tv = true;
+    if (search) {
+      sv = sn.name.toLowerCase().includes(search);
+      tv = tn.name.toLowerCase().includes(search);
+    }
+    if (clan) {
+      sv = sv && sn.clan === clan;
+      tv = tv && tn.clan === clan;
+    }
+    if (district) {
+      sv = sv && sn.district === district;
+      tv = tv && tn.district === district;
+    }
+    if (politics) {
+      sv = sv && sn.politics === politics;
+      tv = tv && tn.politics === politics;
+    }
+    return sv && tv ? linkOpacity : 0.02;
+  });
+}
+
+// ── Events ──────────────────────────────────────────────────────────────────
+
+function setupEvents() {
+  // Filters
+  document.getElementById("filter-search").addEventListener("input", applyFilters);
+  document.getElementById("filter-clan").addEventListener("change", applyFilters);
+  document.getElementById("filter-district").addEventListener("change", applyFilters);
+  document.getElementById("filter-politics").addEventListener("change", applyFilters);
+
+  // Color mode
+  document.querySelectorAll(".color-modes .btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".color-modes .btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      colorMode = btn.dataset.mode;
+      nodeGroup
+        .selectAll("circle")
+        .transition()
+        .duration(400)
+        .attr("fill", nodeColor)
+        .attr("stroke", (d) => d3.color(nodeColor(d)).darker(0.5));
+    });
+  });
+
+  // Display controls
+  document.getElementById("link-opacity").addEventListener("input", (e) => {
+    linkOpacity = parseFloat(e.target.value);
+    document.getElementById("link-opacity-val").textContent = linkOpacity.toFixed(2);
+    linkGroup.selectAll("line").attr("stroke-opacity", linkOpacity);
+  });
+
+  document.getElementById("node-size").addEventListener("input", (e) => {
+    nodeSizeMultiplier = parseFloat(e.target.value);
+    document.getElementById("node-size-val").textContent = nodeSizeMultiplier.toFixed(1);
+    nodeGroup.selectAll("circle").attr("r", nodeRadius);
+    simulation.force("collision", d3.forceCollide().radius((d) => nodeRadius(d) + 1));
+    simulation.alpha(0.3).restart();
+  });
+
+  // Sliders in event form
+  document.getElementById("event-sentiment").addEventListener("input", (e) => {
+    document.getElementById("sentiment-val").textContent = parseFloat(e.target.value).toFixed(1);
+  });
+  document.getElementById("event-intensity").addEventListener("input", (e) => {
+    document.getElementById("intensity-val").textContent = parseFloat(e.target.value).toFixed(1);
+  });
+  document.getElementById("event-bias").addEventListener("input", (e) => {
+    document.getElementById("bias-val").textContent = parseFloat(e.target.value).toFixed(1);
+  });
+
+  // Fire event
+  document.getElementById("btn-fire-event").addEventListener("click", fireEvent);
+
+  // Find bridges
+  document.getElementById("btn-bridges").addEventListener("click", findBridges);
+
+  // Reset
+  document.getElementById("btn-reset").addEventListener("click", resetSimulation);
+}
+
+async function fireEvent() {
+  if (!selectedNode) {
+    alert("Select an origin agent first (click a node)");
+    return;
+  }
+
+  const body = {
+    event_type: document.getElementById("event-type").value,
+    title: document.getElementById("event-title").value || "Untitled Event",
+    origin_agent: selectedNode.id,
+    topic: document.getElementById("event-topic").value,
+    sentiment: parseFloat(document.getElementById("event-sentiment").value),
+    intensity: parseFloat(document.getElementById("event-intensity").value),
+    political_bias: parseFloat(document.getElementById("event-bias").value),
+    max_steps: parseInt(document.getElementById("event-steps").value),
+  };
+
+  const result = await fetch("/api/event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+
+  // Animate propagation
+  await animatePropagation(result);
+
+  // Log it
+  addLogEntry(result);
+}
+
+async function animatePropagation(event) {
+  const affected = new Set();
+
+  for (const step of event.propagation) {
+    for (const r of step.results) {
+      if (r.activated) {
+        affected.add(r.agent_id);
+      }
+    }
+
+    // Highlight affected nodes
+    nodeGroup.selectAll("g.node").each(function (d) {
+      if (affected.has(d.id)) {
+        d3.select(this)
+          .select("circle")
+          .transition()
+          .duration(300)
+          .attr("fill", (d) => {
+            const result = step.results.find((r) => r.agent_id === d.id);
+            if (!result) return nodeColor(d);
+            if (result.stance === "support") return "#4ade80";
+            if (result.stance === "oppose") return "#f87171";
+            return "#94a3b8";
+          })
+          .attr("r", (d) => nodeRadius(d) * 1.5);
+      }
+    });
+
+    await sleep(600);
+  }
+
+  // Fade back after 2 seconds
+  await sleep(2000);
+
+  nodeGroup
+    .selectAll("circle")
+    .transition()
+    .duration(800)
+    .attr("fill", nodeColor)
+    .attr("r", nodeRadius);
+}
+
+function addLogEntry(event) {
+  const log = document.getElementById("event-log");
+  if (log.querySelector("p")) log.innerHTML = "";
+
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement("div");
+  entry.className = "log-entry";
+  entry.innerHTML = `
+    <span class="time">${time}</span>
+    <span class="event-name"> ${event.title}</span>
+    <div class="impact">
+      ${event.total_affected} affected · ${event.steps} steps ·
+      topic: ${event.topic} · sentiment: ${event.sentiment.toFixed(1)}
+    </div>
+  `;
+  log.prepend(entry);
+}
+
+async function findBridges() {
+  const bridges = await fetch("/api/bridges").then((r) => r.json());
+  const bridgeIds = new Set(bridges.map((b) => b.agent.id));
+
+  nodeGroup.selectAll("g.node").classed("highlighted", (d) => bridgeIds.has(d.id));
+
+  // Show in detail panel
+  document.getElementById("agent-detail").innerHTML = `
+    <h2>Bridge Agents</h2>
+    <p style="color:var(--text-dim);font-size:10px;margin-bottom:8px">
+      Agents with highest betweenness centrality — they bridge communities.
+    </p>
+    <ul class="neighbor-list">
+      ${bridges
+        .map(
+          (b) =>
+            `<li onclick="selectAgentById('${b.agent.id}')">
+              <span>${b.agent.name}</span>
+              <span class="rel">${b.agent.clan} (${b.betweenness})</span>
+            </li>`
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+async function resetSimulation() {
+  const seed = Math.floor(Math.random() * 100000);
+  await fetch(`/api/reset?seed=${seed}`, { method: "POST" });
+  graphData = await fetch("/api/graph").then((r) => r.json());
+  const stats = await fetch("/api/stats").then((r) => r.json());
+  updateStats(stats);
+  buildGraph();
+  selectedNode = null;
+  document.getElementById("agent-detail").innerHTML =
+    '<p style="color: var(--text-dim)">Click a node to inspect</p>';
+  document.getElementById("event-log").innerHTML =
+    '<p style="color: var(--text-dim)">No events yet</p>';
+  document.getElementById("btn-fire-event").textContent =
+    "Fire Event (select origin node first)";
+}
+
+// ── WebSocket ───────────────────────────────────────────────────────────────
+
+function connectWebSocket() {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "propagation_step") {
+      // Real-time propagation animation
+      const affected = new Set(data.affected);
+      nodeGroup.selectAll("g.node").each(function (d) {
+        if (affected.has(d.id)) {
+          d3.select(this)
+            .select("circle")
+            .transition()
+            .duration(300)
+            .attr("fill", "#4ade80")
+            .attr("r", (d) => nodeRadius(d) * 1.3);
+        }
+      });
+    }
+  };
+
+  ws.onclose = () => {
+    setTimeout(connectWebSocket, 3000);
+  };
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function updateStats(stats) {
+  document.getElementById("stat-nodes").textContent = `${stats.nodes} agents`;
+  document.getElementById("stat-edges").textContent = `${stats.edges} links`;
+  document.getElementById("stat-density").textContent = `density ${stats.density}`;
+  document.getElementById("stat-clusters").textContent = `clustering ${stats.avg_clustering}`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Boot ────────────────────────────────────────────────────────────────────
+
+window.addEventListener("load", init);
+window.selectAgentById = selectAgentById;

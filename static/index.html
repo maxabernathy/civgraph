@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CivGraph</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div id="loading"><span>CIVGRAPH INITIALIZING...</span></div>
+
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <h1>CivGraph</h1>
+    <div class="stats" id="header-stats">
+      <span id="stat-nodes">--</span>
+      <span id="stat-edges">--</span>
+      <span id="stat-density">--</span>
+      <span id="stat-clusters">--</span>
+    </div>
+  </header>
+
+  <!-- Left sidebar: filters & controls -->
+  <div id="sidebar">
+    <h2>Filter</h2>
+
+    <div class="filter-group">
+      <label>Search</label>
+      <input type="text" id="filter-search" placeholder="name...">
+    </div>
+
+    <div class="filter-group">
+      <label>Clan</label>
+      <select id="filter-clan"><option value="">All</option></select>
+    </div>
+
+    <div class="filter-group">
+      <label>District</label>
+      <select id="filter-district"><option value="">All</option></select>
+    </div>
+
+    <div class="filter-group">
+      <label>Politics</label>
+      <select id="filter-politics">
+        <option value="">All</option>
+        <option value="far_left">Far Left</option>
+        <option value="left">Left</option>
+        <option value="center_left">Center Left</option>
+        <option value="center">Center</option>
+        <option value="center_right">Center Right</option>
+        <option value="right">Right</option>
+        <option value="far_right">Far Right</option>
+      </select>
+    </div>
+
+    <h2>Color By</h2>
+    <div class="color-modes">
+      <button class="btn active" data-mode="clan">Clan</button>
+      <button class="btn" data-mode="politics">Politics</button>
+      <button class="btn" data-mode="district">District</button>
+      <button class="btn" data-mode="influence">Influence</button>
+    </div>
+
+    <h2>Display</h2>
+    <div class="filter-group">
+      <label>Link Opacity <span class="slider-val" id="link-opacity-val">0.15</span></label>
+      <input type="range" id="link-opacity" min="0" max="1" step="0.05" value="0.15">
+    </div>
+    <div class="filter-group">
+      <label>Node Size <span class="slider-val" id="node-size-val">1.0</span></label>
+      <input type="range" id="node-size" min="0.3" max="3" step="0.1" value="1.0">
+    </div>
+
+    <h2>Analysis</h2>
+    <button class="btn btn-block" id="btn-bridges">Find Bridge Agents</button>
+    <button class="btn btn-block" id="btn-reset">Reset Simulation</button>
+  </div>
+
+  <!-- Graph -->
+  <div id="graph-container">
+    <svg id="graph-svg"></svg>
+    <div id="tooltip"></div>
+  </div>
+
+  <!-- Right panel: agent detail -->
+  <div id="detail">
+    <h2>Agent Detail</h2>
+    <div id="agent-detail">
+      <p style="color: var(--text-dim)">Click a node to inspect</p>
+    </div>
+  </div>
+
+  <!-- Bottom panel -->
+  <div id="bottom">
+    <div id="event-panel">
+      <h2>Trigger Event</h2>
+      <div class="event-form">
+        <div>
+          <label>Type</label>
+          <select id="event-type">
+            <option value="election">Election</option>
+            <option value="scandal">Scandal</option>
+            <option value="development">Development</option>
+            <option value="crisis">Crisis</option>
+            <option value="protest">Protest</option>
+            <option value="festival">Festival</option>
+            <option value="tech_boom">Tech Boom</option>
+            <option value="policy_change">Policy Change</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div>
+          <label>Topic</label>
+          <select id="event-topic"></select>
+        </div>
+        <div class="full">
+          <label>Title</label>
+          <input type="text" id="event-title" placeholder="Event title...">
+        </div>
+        <div>
+          <label>Sentiment <span class="slider-val" id="sentiment-val">0.5</span></label>
+          <input type="range" id="event-sentiment" min="-1" max="1" step="0.1" value="0.5">
+        </div>
+        <div>
+          <label>Intensity <span class="slider-val" id="intensity-val">0.7</span></label>
+          <input type="range" id="event-intensity" min="0" max="1" step="0.1" value="0.7">
+        </div>
+        <div>
+          <label>Political Bias <span class="slider-val" id="bias-val">0.0</span></label>
+          <input type="range" id="event-bias" min="-3" max="3" step="0.5" value="0">
+        </div>
+        <div>
+          <label>Steps</label>
+          <input type="number" id="event-steps" value="6" min="1" max="15">
+        </div>
+        <div class="full">
+          <button class="btn btn-primary btn-block" id="btn-fire-event">
+            Fire Event (select origin node first)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="log-panel">
+      <h2>Event Log</h2>
+      <div id="event-log">
+        <p style="color: var(--text-dim)">No events yet</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="/static/app.js"></script>
+
+</body>
+</html>
