@@ -13,6 +13,7 @@ let colorMode = "clan";
 let nodeSizeMultiplier = 1.0;
 let linkOpacity = 0.15;
 let ws = null;
+let eventHistory = [];  // local mirror of fired events
 
 // ── Color palettes ──────────────────────────────────────────────────────────
 
@@ -63,7 +64,6 @@ async function init() {
     opt.textContent = t.replace(/_/g, " ");
     topicSelect.appendChild(opt);
   });
-  // Add governance/trust/power topics
   ["governance", "trust", "power"].forEach((t) => {
     const opt = document.createElement("option");
     opt.value = t;
@@ -94,6 +94,7 @@ async function init() {
 
   buildGraph();
   setupEvents();
+  setupArtifacts();
   connectWebSocket();
 
   document.getElementById("loading").classList.add("hidden");
@@ -124,6 +125,10 @@ function buildGraph() {
   linkGroup = g.append("g").attr("class", "links");
   nodeGroup = g.append("g").attr("class", "nodes");
 
+  // Scale forces to viewport
+  const dim = Math.min(width, height);
+  const chargeStrength = -20 - dim * 0.015;
+
   // Force simulation
   simulation = d3
     .forceSimulation(graphData.nodes)
@@ -138,7 +143,7 @@ function buildGraph() {
         })
         .strength((d) => Math.abs(d.weight) * 0.3)
     )
-    .force("charge", d3.forceManyBody().strength(-30).distanceMax(300))
+    .force("charge", d3.forceManyBody().strength(chargeStrength).distanceMax(dim * 0.5))
     .force("center", d3.forceCenter(width / 2, height / 2))
     .force("collision", d3.forceCollide().radius((d) => nodeRadius(d) + 1))
     .alphaDecay(0.02)
@@ -249,7 +254,6 @@ function hideTooltip() {
 async function selectAgent(d) {
   selectedNode = d;
 
-  // Highlight node and neighbors
   const detail = await fetch(`/api/agent/${d.id}`).then((r) => r.json());
   const neighborIds = new Set(detail.neighbors.map((n) => n.id));
   neighborIds.add(d.id);
@@ -259,10 +263,9 @@ async function selectAgent(d) {
   linkGroup.selectAll("line").classed("highlighted", (l) => {
     const sid = typeof l.source === "object" ? l.source.id : l.source;
     const tid = typeof l.target === "object" ? l.target.id : l.target;
-    return (sid === d.id || tid === d.id);
+    return sid === d.id || tid === d.id;
   });
 
-  // Update detail panel
   const agent = detail.agent;
   const opinions = Object.entries(agent.opinion_state)
     .map(
@@ -293,7 +296,7 @@ async function selectAgent(d) {
         <div class="bar-row"><span class="bar-label">Loyalty</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.loyalty * 100}%"></div></div></div>
         <div class="bar-row"><span class="bar-label">Resources</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.resources * 100}%"></div></div></div>
       </div>
-      <div style="margin-top:6px;font-size:10px;color:var(--text-dim)">
+      <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
         Interests: ${agent.interests.map((i) => i.replace(/_/g, " ")).join(", ")}
       </div>
     </div>
@@ -316,7 +319,6 @@ async function selectAgent(d) {
     </ul>
   `;
 
-  // Update fire event button
   document.getElementById("btn-fire-event").textContent = `Fire Event from ${agent.name}`;
 }
 
@@ -343,7 +345,6 @@ function applyFilters() {
     d3.select(this).style("opacity", visible ? 1 : 0.05);
   });
 
-  // Dim links connected to hidden nodes
   linkGroup.selectAll("line").style("opacity", function (l) {
     const sid = typeof l.source === "object" ? l.source.id : l.source;
     const tid = typeof l.target === "object" ? l.target.id : l.target;
@@ -430,6 +431,15 @@ function setupEvents() {
 
   // Reset
   document.getElementById("btn-reset").addEventListener("click", resetSimulation);
+
+  // Resize handler — rebuild graph on window resize
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (graphData) buildGraph();
+    }, 250);
+  });
 }
 
 async function fireEvent() {
@@ -455,11 +465,47 @@ async function fireEvent() {
     body: JSON.stringify(body),
   }).then((r) => r.json());
 
+  eventHistory.push(result);
+
+  // Refresh opinion data on nodes
+  await refreshNodeOpinions();
+
   // Animate propagation
   await animatePropagation(result);
 
   // Log it
   addLogEntry(result);
+}
+
+async function refreshNodeOpinions() {
+  // Fetch fresh graph data to get updated opinion states
+  const fresh = await fetch("/api/graph").then((r) => r.json());
+  // Merge opinion data into current nodes (keep positions)
+  const freshMap = {};
+  for (const n of fresh.nodes) freshMap[n.id] = n;
+  for (const n of graphData.nodes) {
+    const fn = freshMap[n.id];
+    if (fn) {
+      n._opinions = fn._opinions;
+    }
+  }
+  // Also fetch per-agent opinions for artifact use
+  for (const n of graphData.nodes) {
+    n._opinions = n._opinions || {};
+  }
+  // Batch fetch: use the search endpoint to get opinion_state for all agents
+  // (more efficient: just re-fetch graph which includes opinion data)
+  // The graph endpoint doesn't include opinion_state, so we need the agents endpoint
+  // For efficiency, fetch a sample to populate _opinions
+  const allAgents = await fetch("/api/search?limit=500").then((r) => r.json());
+  const agentMap = {};
+  for (const a of allAgents) agentMap[a.id] = a;
+  for (const n of graphData.nodes) {
+    const a = agentMap[n.id];
+    if (a && a.opinion_state) {
+      n._opinions = a.opinion_state;
+    }
+  }
 }
 
 async function animatePropagation(event) {
@@ -472,7 +518,6 @@ async function animatePropagation(event) {
       }
     }
 
-    // Highlight affected nodes
     nodeGroup.selectAll("g.node").each(function (d) {
       if (affected.has(d.id)) {
         d3.select(this)
@@ -493,7 +538,6 @@ async function animatePropagation(event) {
     await sleep(600);
   }
 
-  // Fade back after 2 seconds
   await sleep(2000);
 
   nodeGroup
@@ -528,10 +572,9 @@ async function findBridges() {
 
   nodeGroup.selectAll("g.node").classed("highlighted", (d) => bridgeIds.has(d.id));
 
-  // Show in detail panel
   document.getElementById("agent-detail").innerHTML = `
     <h2>Bridge Agents</h2>
-    <p style="color:var(--text-dim);font-size:10px;margin-bottom:8px">
+    <p style="color:var(--text-dim);font-size:0.85em;margin-bottom:8px">
       Agents with highest betweenness centrality — they bridge communities.
     </p>
     <ul class="neighbor-list">
@@ -556,12 +599,85 @@ async function resetSimulation() {
   updateStats(stats);
   buildGraph();
   selectedNode = null;
+  eventHistory = [];
   document.getElementById("agent-detail").innerHTML =
     '<p style="color: var(--text-dim)">Click a node to inspect</p>';
   document.getElementById("event-log").innerHTML =
     '<p style="color: var(--text-dim)">No events yet</p>';
   document.getElementById("btn-fire-event").textContent =
     "Fire Event (select origin node first)";
+}
+
+// ── Artifacts ───────────────────────────────────────────────────────────────
+
+function setupArtifacts() {
+  const modal = document.getElementById("artifact-modal");
+
+  // Artifact buttons
+  document.querySelectorAll("[data-artifact]").forEach((btn) => {
+    btn.addEventListener("click", () => openArtifact(btn.dataset.artifact));
+  });
+
+  // Close
+  document.getElementById("btn-close-artifact").addEventListener("click", () => {
+    modal.classList.remove("visible");
+  });
+
+  // Escape key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") modal.classList.remove("visible");
+  });
+
+  // Export buttons
+  document.getElementById("btn-export-png").addEventListener("click", () => Artifacts.exportPNG());
+  document.getElementById("btn-export-pdf").addEventListener("click", () => Artifacts.exportPDF());
+
+  // Re-render on resolution change
+  document.getElementById("res-select").addEventListener("change", () => {
+    if (currentArtifact) openArtifact(currentArtifact);
+  });
+}
+
+let currentArtifact = null;
+
+async function openArtifact(type) {
+  currentArtifact = type;
+  const modal = document.getElementById("artifact-modal");
+  modal.classList.add("visible");
+
+  const titles = {
+    topography: "INFLUENCE TOPOGRAPHY",
+    constellation: "CLAN CONSTELLATIONS",
+    heatmap: "OPINION HEATMAP",
+    seismograph: "EVENT SEISMOGRAPH",
+  };
+  document.getElementById("artifact-title").textContent = titles[type] || "ARTIFACT";
+
+  // Ensure we have opinion data
+  if (type === "heatmap" && eventHistory.length > 0) {
+    await refreshNodeOpinions();
+  }
+
+  // Small delay to let modal render
+  await sleep(50);
+
+  const nodes = graphData.nodes;
+  const links = graphData.links;
+
+  switch (type) {
+    case "topography":
+      Artifacts.renderTopography(nodes, links);
+      break;
+    case "constellation":
+      Artifacts.renderConstellation(nodes, links);
+      break;
+    case "heatmap":
+      Artifacts.renderHeatmap(nodes, links);
+      break;
+    case "seismograph":
+      Artifacts.renderSeismograph(nodes, links, eventHistory);
+      break;
+  }
 }
 
 // ── WebSocket ───────────────────────────────────────────────────────────────
@@ -573,7 +689,6 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === "propagation_step") {
-      // Real-time propagation animation
       const affected = new Set(data.affected);
       nodeGroup.selectAll("g.node").each(function (d) {
         if (affected.has(d.id)) {

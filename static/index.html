@@ -74,6 +74,14 @@
       <input type="range" id="node-size" min="0.3" max="3" step="0.1" value="1.0">
     </div>
 
+    <h2>Artifacts</h2>
+    <div class="artifact-modes">
+      <button class="btn" data-artifact="topography">Influence Topography <span class="icon">&#9650;</span></button>
+      <button class="btn" data-artifact="constellation">Clan Constellations <span class="icon">&#10022;</span></button>
+      <button class="btn" data-artifact="heatmap">Opinion Heatmap <span class="icon">&#9632;</span></button>
+      <button class="btn" data-artifact="seismograph">Event Seismograph <span class="icon">&#126;</span></button>
+    </div>
+
     <h2>Analysis</h2>
     <button class="btn btn-block" id="btn-bridges">Find Bridge Agents</button>
     <button class="btn btn-block" id="btn-reset">Reset Simulation</button>
@@ -154,7 +162,31 @@
 
 </div>
 
+<!-- Artifact modal -->
+<div id="artifact-modal">
+  <div id="artifact-header">
+    <span id="artifact-title">ARTIFACT</span>
+    <div class="controls">
+      <select id="res-select">
+        <option value="1">1x (screen)</option>
+        <option value="2" selected>2x (print)</option>
+        <option value="4">4x (high-res)</option>
+        <option value="8">8x (poster)</option>
+      </select>
+      <button class="btn" id="btn-export-png">Export PNG</button>
+      <button class="btn btn-primary" id="btn-export-pdf">Export PDF</button>
+      <button class="btn btn-danger" id="btn-close-artifact">Close</button>
+    </div>
+  </div>
+  <div id="artifact-canvas-wrap">
+    <canvas id="artifact-canvas"></canvas>
+  </div>
+  <div id="artifact-meta"></div>
+</div>
+
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="/static/artifacts.js"></script>
 <script src="/static/app.js"></script>
 
 </body>
