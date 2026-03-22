@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 
 from model import generate_city, export_for_d3, graph_stats, get_agent, INTEREST_POOL, DISTRICTS, CLAN_NAMES
+from capital import SocialClass, LifePhase, EducationTrack, EU_CONFIG
 from events import (
     create_event, opinion_summary, find_bridges, find_coalitions,
     EVENT_TEMPLATES,
@@ -159,6 +160,9 @@ async def get_meta():
         "districts": DISTRICTS,
         "interests": INTEREST_POOL,
         "event_types": list(EVENT_TEMPLATES.keys()),
+        "social_classes": [c.value for c in SocialClass],
+        "life_phases": [p.value for p in LifePhase],
+        "education_tracks": [t.value for t in EducationTrack],
     }
 
 
