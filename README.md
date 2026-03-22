@@ -145,9 +145,35 @@ Within clans, agents aged 45+ are assigned as parents of agents under 30. Capita
 | Lower-middle | 25% |
 | Lower | 15% |
 
+## Macro-Environment
+
+18 time-varying indicators across 5 domains model the city's macro context. These evolve each tick (year) through internal dynamics and bidirectional coupling with agents.
+
+| Domain | Indicators | Key dynamics |
+|---|---|---|
+| Economy | GDP growth, unemployment, inflation, business confidence | Okun's law, Phillips curve, confidence feedback |
+| Housing | Price index, vacancy rate, rent burden, construction | Price/vacancy/construction feedback loop |
+| Migration | Net migration, diversity, integration | Attracted by jobs, repelled by high rents |
+| Culture | Cultural spending, social cohesion, media pluralism | Cohesion eroded by inequality, boosted by integration |
+| Governance | Public spending, corruption, policy stability, democratic quality | Corruption mean-reverts, democratic quality tracks cohesion |
+
+### Coupling with agents
+
+- **Economy -> Agents**: GDP growth raises economic capital (proportional to existing wealth). Unemployment penalizes lower classes more (class-weighted). Inflation erodes unhedged savings.
+- **Housing -> Agents**: Rent burden drains lower-capital agents directly.
+- **Culture -> Agents**: Cultural spending boosts cultural capital. Social cohesion boosts social capital.
+- **Governance -> Agents**: Democratic quality legitimizes symbolic capital. Corruption devalues it. Agent habitus institutional_trust drifts toward democratic quality.
+- **Agents -> Environment**: Average economic capital drives business confidence. Average symbolic capital supports democratic quality. Opinion polarization erodes social cohesion.
+- **Events -> Environment**: Each event type shifts specific indicators (housing crisis: +12% price, +5% rent; scandal: +5% corruption; crisis: -1.5% GDP).
+
+### Tick system
+
+Advance the simulation 1-10 years at a time. Each year: evolve indicators, apply agent coupling, age all agents, recompute lifecycle phases and capital curves. Full history is recorded for the City Pulse artifact.
+
 ## What It Models
 
 - **500 agents** — each with clan, district, occupation, political leaning, interests, four capitals, habitus, age, lifecycle phase, personality
+- **18 macro-environment indicators** across 5 domains (economy, housing, migration, culture, governance), evolving over time with internal dynamics and agent coupling
 - **20 clans** with power-law sizes, each anchored to a home district and a class center
 - **10 districts** — agents have a 60% chance of living in their clan's home base
 - **7 political leanings** — far left to far right, with clan-correlated tendencies
@@ -159,14 +185,17 @@ Within clans, agents aged 45+ are assigned as parents of agents under 30. Capita
 ## Architecture
 
 ```
-capital.py    — Bourdieusian capital types, habitus, lifecycle curves,
-                intergenerational transmission, EU calibration constants
-model.py      — Agent dataclass, city generator (500 agents with capital/habitus),
-                graph queries, D3 export
-events.py     — Event system, capital-aware influence propagation, coalition detection
-server.py     — FastAPI REST + WebSocket API (Pydantic-validated, security-hardened)
-static/       — D3.js frontend (8 color modes, capital bars, artifact export)
-run.py        — Launcher (localhost-only)
+environment.py — Macro-environment model (18 indicators, 5 domains),
+                 internal dynamics, agent coupling, event coupling, tick system
+capital.py     — Bourdieusian capital types, habitus, lifecycle curves,
+                 intergenerational transmission, EU calibration constants
+model.py       — Agent dataclass, city generator (500 agents with capital/habitus),
+                 graph queries, D3 export
+events.py      — Event system, capital-aware influence propagation, coalition detection
+server.py      — FastAPI REST + WebSocket API (Pydantic-validated, security-hardened)
+static/        — D3.js frontend (8 color modes, capital bars, environment gauges,
+                 6 exportable artifacts)
+run.py         — Launcher (localhost-only)
 ```
 
 ## API
@@ -182,5 +211,9 @@ run.py        — Launcher (localhost-only)
 | `GET /api/bridges` | Top 20 bridge agents by betweenness centrality |
 | `GET /api/coalitions/{topic}` | Emergent coalitions around a topic |
 | `GET /api/influence_path/{source}/{target}` | Shortest influence path |
-| `POST /api/reset?seed=N` | Reset with new random city |
+| `GET /api/environment` | Current macro-environment indicators |
+| `GET /api/environment/history` | Full history of indicator snapshots |
+| `GET /api/environment/meta` | Indicator metadata (labels, ranges, domains) |
+| `POST /api/tick` | Advance simulation by N years (1-10) |
+| `POST /api/reset?seed=N` | Reset with new random city + environment |
 | `WS /ws` | WebSocket for live propagation animation |
