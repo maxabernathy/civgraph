@@ -1,6 +1,6 @@
 # CivGraph
 
-An agent-based model of urban social dynamics, built on Pierre Bourdieu's theory of capital and habitus. 1,000 individuals in a mid-scale city form a living network where influence, opinion, and power flow through clan ties, professional bonds, institutional memberships, and shared dispositions -- shaped by macro forces of economy, housing, migration, culture, and governance, disrupted by waves of technological change, refracted through print, mass, and social media, and grounded in the social determinants of health.
+An agent-based model of urban social dynamics, built on Pierre Bourdieu's theory of capital and habitus, deepened by Actor-Network Theory (Latour, Callon, Law). 1,000 individuals in a mid-scale city form a heterogeneous network where influence, opinion, and power flow through clan ties, professional bonds, institutional memberships, and shared dispositions -- shaped by macro forces of economy, housing, migration, culture, and governance, disrupted by waves of technological change (modeled as non-human actants), refracted through print, mass, and social media, grounded in the social determinants of health, and analyzed through the lens of translation sociology, performativity, and obligatory passage points.
 
 ![The social graph of a city -- 1,000 agents colored by clan affiliation, with economy, media, and health panels visible](docs/01-main-graph.png)
 
@@ -16,7 +16,7 @@ python run.py
 
 ## Theoretical Foundations
 
-CivGraph operationalizes concepts from Bourdieu's *Distinction* (1979) and *The Forms of Capital* (1986), Autor's task-content framework (2003), Marmot's social determinants of health (2005), Mizruchi's interlocking directorates (1996), and McCombs & Shaw's agenda-setting theory (1972), combined with Granovetter's network embeddedness (1985) and Schelling-style emergent dynamics.
+CivGraph operationalizes concepts from Bourdieu's *Distinction* (1979), Latour's *Reassembling the Social* (2005), Callon's translation sociology (1986), Law's heterogeneous engineering (1987), Autor's task-content framework (2003), Marmot's social determinants of health (2005), Mizruchi's interlocking directorates (1996), Castells' *Communication Power* (2009), and McCombs & Shaw's agenda-setting theory (1972), combined with Granovetter's network embeddedness (1985), Burt's structural holes (1992), and Schelling-style emergent dynamics.
 
 ### The four capitals
 
@@ -40,7 +40,7 @@ Bourdieu's *habitus* -- durable dispositions acquired through socialization:
 
 ### Coloring the graph
 
-Fourteen color modes reveal different layers of the simulation. Switch between Clan, Politics, Class, Capital, Age, Education, District, Influence, Emergence, Income, Disruption, Media, Health, and Boards.
+Fifteen color modes reveal different layers of the simulation. Switch between Clan, Politics, Class, Capital, Age, Education, District, Influence, Emergence, Income, Disruption, Media, Health, Boards, and Agency.
 
 ![Class color mode -- stratification visible in network structure](docs/02-class-view.png)
 
@@ -134,6 +134,46 @@ Skills decay ~3% per year without refreshment. Lifelong learning propensity (dri
 
 ---
 
+## Agency Dynamics (STS)
+
+Drawing on Actor-Network Theory (Latour 2005, Callon 1986, Law 1987), CivGraph treats the simulation not as a system of human agents in a passive environment, but as a heterogeneous assemblage of human and non-human actants engaged in continuous processes of translation, enrollment, and stabilization.
+
+### Non-human actants (Latour)
+
+Technologies, media platforms, and institutions are not passive context -- they are actants with computed agency scores. AI/ML at 18% adoption has agency 0.14; social media at 68% reach has agency 0.64 despite low trust (algorithmic power operates independently of credibility). Mechanization at 95% adoption has agency 0.76 but is almost entirely black-boxed.
+
+### Translation dynamics (Callon)
+
+Events undergo translation as they propagate through the network. Each intermediary agent reframes the event based on their interests, institutional position, and political orientation -- Callon's four moments of translation (problematization, interessement, enrolment, mobilization) are operationalized as computed shifts in sentiment, topic framing, and institutional weight.
+
+### Obligatory passage points (Callon)
+
+Beyond Burt's (1992) structural holes, OPPs combine betweenness centrality with institutional gatekeeping power, clan/district diversity, and symbolic legitimacy. Board chairs who also bridge communities become unavoidable intermediaries through whom information and influence must pass.
+
+### Performativity (Callon 1998, MacKenzie 2006)
+
+The model measures how its own categories become self-fulfilling. Class performativity tracks whether agents' economic capital, cultural taste, and network homophily align with their class label. High performativity means categories actively shape behavior -- economics as "engine, not camera."
+
+### Black-boxing (Latour)
+
+Crystallized norms, established institutions, and mature technologies become invisible infrastructure. Black-boxed elements resist change but can be "opened" by crises, scandals, or technological disruption. The model tracks black-boxing across norms, institutions, and technology maturity.
+
+### Centers of calculation (Latour)
+
+Agents who accumulate information from across the network through institutional diversity, network reach, and processing capacity. They achieve power by being able to "see" more of the network than anyone else.
+
+### Network programmers and switchers (Castells 2009)
+
+Programmers set the agenda (high symbolic capital + institutional leadership). Switchers connect otherwise separate worlds (high betweenness + cross-type institutional membership across different domains).
+
+### Agency color mode
+
+![Agency color mode -- Cividis gradient shows obligatory passage point scores](docs/21-agency-color.png)
+
+The **Agency** color mode reveals the structural power topology -- who controls the flows. Lighter nodes are obligatory passage points where information and influence converge.
+
+---
+
 ## Media Dynamics
 
 Three media ecosystems shape how information flows, opinions form, and events propagate.
@@ -147,6 +187,21 @@ Three media ecosystems shape how information flows, opinions form, and events pr
 ![Media color mode -- purple gradient shows social media exposure and algorithmic bubble](docs/17-media-color.png)
 
 Each agent has a media consumption profile (print/mass/social exposure, media literacy, algorithmic bubble depth) shaped by age, education, class, and social capital. Media amplifies or dampens event propagation per agent.
+
+---
+
+## Microscope: Atomic Transaction Stream
+
+The Microscope opens in a separate window and reveals every individual interaction during a simulation tick — the atomic transactions that are normally invisible inside the black box of a year's evolution.
+
+![Microscope -- scrolling transaction stream showing 1,000+ atomic interactions](docs/22-microscope.png)
+
+Each row records a single interaction: media effects shifting an agent's opinion on a topic, social media deepening an algorithmic bubble, a technology actant displacing a task, a chronic condition onset, an institution accumulating capital for a board member. Sources include non-human actants (Latour): AI/ML, social media, mass media, institutional structures.
+
+- **Color-coded type chips** in the summary bar (click to filter)
+- **Search** by agent name or keyword
+- **Click any row** to highlight the agents in the main graph window
+- **Export** as "Ledger of Transactions" (Plate VIII) in the engraving aesthetic
 
 ---
 
@@ -256,6 +311,11 @@ Seven domain strips (economy, housing, migration, culture, governance, health, i
 ## Architecture
 
 ```
+agency.py        -- STS agency dynamics: non-human actants (Latour),
+                    translation (Callon), obligatory passage points,
+                    performativity (Callon/MacKenzie), black-boxing,
+                    centers of calculation, heterogeneous engineering
+                    (Law), network programmers/switchers (Castells).
 health.py        -- Social determinants of health: per-agent physical,
                     mental, stress, work capacity, chronic conditions.
                     Marmot class gradient, Berkman social buffering,
@@ -282,7 +342,7 @@ model.py         -- Agent dataclass, city generator (1,000 agents,
 events.py        -- Capital-aware BFS propagation, media amplification,
                     coalition detection.
 server.py        -- FastAPI REST + WebSocket, 35+ endpoints.
-static/          -- D3.js frontend (14 color modes, 7 pen-plotter
+static/          -- D3.js frontend (15 color modes, 7 pen-plotter
                     artifacts, 6-panel dashboard, A2 print export).
 ```
 
@@ -306,4 +366,7 @@ static/          -- D3.js frontend (14 color modes, 7 pen-plotter
 | `GET /api/institutions/types` | Institution type profiles and named instances |
 | `GET /api/environment` | Current 26 macro indicators |
 | `GET /api/emergence` | 13-dimension emergence state with coupling and warnings |
+| `GET /api/sts` | Full STS snapshot: actants, OPPs, performativity, black-boxing, alignment |
+| `GET /api/sts/passage-points` | Top 20 obligatory passage points (Callon) |
+| `GET /api/sts/network-capital` | Network programmers and switchers (Castells) |
 | `WS /ws` | WebSocket for live propagation animation |

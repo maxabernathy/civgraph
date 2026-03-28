@@ -35,6 +35,8 @@ from media import (
     MediaLandscape, create_media_landscape, compute_media_stats,
 )
 from health import compute_health_stats
+from agency import compute_sts_snapshot, compute_passage_points, compute_network_capital
+from transactions import LEDGER, TxType, TX_COLORS, TX_LABELS
 from institutions import (
     compute_institution_stats, InstitutionType, INSTITUTION_PROFILES,
     INSTITUTION_NAMES,
@@ -118,6 +120,11 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return FileResponse(str(static_dir / "index.html"))
+
+
+@app.get("/microscope", response_class=HTMLResponse)
+async def microscope():
+    return FileResponse(str(static_dir / "microscope.html"))
 
 
 # ── REST API ─────────────────────────────────────────────────────────────────
@@ -608,6 +615,51 @@ async def get_institution_types():
         }
         for t, p in INSTITUTION_PROFILES.items()
     }
+
+
+# ── STS Agency endpoints ─────────────────────────────────────────────────
+
+@app.get("/api/sts")
+async def get_sts():
+    """Full STS analytics: actants, OPPs, performativity, black-boxing, etc."""
+    G = ensure_graph()
+    from economy import TECH_WAVES
+    tech_state = {k: {"adoption": w.adoption} for k, w in TECH_WAVES.items()}
+    global MEDIA
+    return compute_sts_snapshot(G, tech_state, MEDIA)
+
+
+@app.get("/api/sts/passage-points")
+async def get_passage_points():
+    G = ensure_graph()
+    return compute_passage_points(G)
+
+
+@app.get("/api/sts/network-capital")
+async def get_network_capital():
+    G = ensure_graph()
+    return compute_network_capital(G)
+
+
+# ── Transaction ledger endpoints ─────────────────────────────────────────
+
+@app.get("/api/transactions")
+async def get_transactions(
+    limit: int = 500,
+    offset: int = 0,
+    type: Optional[str] = None,
+):
+    """Get recorded atomic transactions from the last tick."""
+    return {
+        "transactions": LEDGER.to_list(limit=limit, offset=offset, filter_type=type),
+        "summary": LEDGER.summary(),
+        "types": {t.value: {"label": TX_LABELS[t], "color": TX_COLORS[t]} for t in TxType},
+    }
+
+
+@app.get("/api/transactions/summary")
+async def get_transaction_summary():
+    return LEDGER.summary()
 
 
 # ── WebSocket for live propagation ──────────────────────────────────────────

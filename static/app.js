@@ -14,6 +14,7 @@ let nodeSizeMultiplier = 1.0;
 let linkOpacity = 0.15;
 let ws = null;
 let eventHistory = [];  // local mirror of fired events
+let microscopeWin = null;
 
 // ── Security: HTML escaping ─────────────────────────────────────────────────
 
@@ -98,6 +99,9 @@ function nodeColor(d) {
       // Board power + membership count
       const instScore = Math.min(1, (d.board_power || 0) * 0.6 + (d.membership_count || 0) / 4 * 0.4);
       return d3.interpolateOranges(0.15 + instScore * 0.75);
+    case "agency":
+      // OPP score (obligatory passage point — Callon/Latour)
+      return d3.interpolateCividis(0.1 + Math.min(1, (d.opp_score || 0) * 2) * 0.85);
     default:
       return "#4a9eff";
   }
@@ -298,7 +302,7 @@ function showTooltip(event, d) {
     ? `<div class="dim">Social media: ${((d.social_media_exposure || 0) * 100).toFixed(0)}%${d.algorithmic_bubble > 0.01 ? ` · Bubble: ${(d.algorithmic_bubble * 100).toFixed(0)}%` : ""}</div>`
     : "";
   const healthLine = d.health_composite !== undefined
-    ? `<div class="dim">Health: ${((d.health_composite || 0.75) * 100).toFixed(0)}%${d.chronic_condition ? ' · Chronic' : ''}${d.membership_count ? ` · ${d.membership_count} memberships` : ""}</div>`
+    ? `<div class="dim">Health: ${((d.health_composite || 0.75) * 100).toFixed(0)}%${d.chronic_condition ? ' · Chronic' : ''}${d.membership_count ? ` · ${d.membership_count} memberships` : ""}${d.opp_score > 0.3 ? ' · OPP' : ''}</div>`
     : "";
   tooltip.innerHTML = `
     <div class="name">${esc(d.name)}</div>
@@ -435,6 +439,21 @@ async function selectAgent(d) {
       <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
         Interests: ${agent.interests.map((i) => esc(i.replace(/_/g, " "))).join(", ")}
       </div>
+      ${detail.degree > 5 ? `
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">AGENCY <span style="font-style:italic;opacity:0.5">(Latour/Callon)</span></div>
+        <div style="font-size:0.75em;color:var(--text-dim)">
+          ${(() => {
+            const opp = (agent.capital?.symbolic || 0) * 0.3 + (agent.institutions?.board_power || 0) * 0.3 + (detail.degree / 50) * 0.2;
+            const roles = [];
+            if (opp > 0.35) roles.push('<span style="color:var(--accent)">Obligatory Passage Point</span>');
+            if ((agent.institutions?.board_power || 0) > 0.3 && agent.capital?.symbolic > 0.4) roles.push('<span style="color:#b08f4a">Programmer</span>');
+            if (detail.degree > 15 && (agent.institutions?.membership_count || 0) >= 2) roles.push('<span style="color:#3a7d6e">Switcher</span>');
+            if ((agent.institutions?.membership_count || 0) >= 2 && agent.capital?.cultural > 0.4) roles.push('<span style="color:#5a4080">Center of Calc.</span>');
+            return roles.length > 0 ? roles.join(' · ') : '<span style="opacity:0.4">peripheral actant</span>';
+          })()}
+        </div>
+      </div>` : ""}
       ${detail.emergence && (detail.emergence.catalyst || detail.emergence.constrained) ? `
       <div class="meta" style="margin-top:6px">
         <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">EMERGENCE</div>
@@ -583,6 +602,25 @@ function setupEvents() {
 
   // Reset
   document.getElementById("btn-reset").addEventListener("click", resetSimulation);
+
+  // Microscope — open in separate window
+  document.getElementById("btn-microscope").addEventListener("click", () => {
+    microscopeWin = window.open("/microscope", "civgraph-microscope",
+      "width=1200,height=700,menubar=no,toolbar=no,location=no,status=no");
+  });
+
+  // Listen for microscope highlight requests
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "microscope_highlight" && e.data.agentIds) {
+      const ids = new Set(e.data.agentIds);
+      nodeGroup.selectAll("g.node").classed("highlighted", (d) => ids.has(d.id));
+      linkGroup.selectAll("line").classed("highlighted", (l) => {
+        const sid = typeof l.source === "object" ? l.source.id : l.source;
+        const tid = typeof l.target === "object" ? l.target.id : l.target;
+        return ids.has(sid) || ids.has(tid);
+      });
+    }
+  });
 
   // Resize handler — rebuild graph on window resize
   let resizeTimer;
@@ -959,7 +997,13 @@ async function advanceTick() {
     renderMediaPanel(result.media);
   }
   if (result) {
-    renderHealthPanel(result.health || null, result.institutions || null);
+    const stsData = await safeFetch("/api/sts");
+    renderHealthPanel(result.health || null, result.institutions || null, stsData);
+  }
+
+  // Notify Microscope window of tick completion
+  if (microscopeWin && !microscopeWin.closed) {
+    microscopeWin.postMessage({ type: "tick_complete" }, "*");
   }
 
   // Refresh graph data to reflect capital/economy/media changes
@@ -1199,7 +1243,7 @@ function renderMediaPanel(mediaData) {
   container.innerHTML = html;
 }
 
-function renderHealthPanel(healthData, instData) {
+function renderHealthPanel(healthData, instData, stsData) {
   const container = document.getElementById("health-gauges");
   if (!container) return;
 
@@ -1246,10 +1290,29 @@ function renderHealthPanel(healthData, instData) {
     }
   }
 
+  if (stsData) {
+    html += `<div class="env-domain-label">agency (STS)</div>`;
+    const stsGauges = [
+      { label: "Performativity", val: stsData.performativity?.composite || 0, color: "#5a4080" },
+      { label: "Black-boxing", val: stsData.black_boxing?.composite || 0, color: SEPIA || "#6b5b4f" },
+      { label: "Alignment", val: stsData.heterogeneous_alignment?.composite || 0, color: "#3a7d6e" },
+      { label: "Fragility", val: stsData.heterogeneous_alignment?.fragility || 0, color: "var(--negative)" },
+    ];
+    for (const g of stsGauges) {
+      html += `<div class="env-gauge">
+        <span class="env-gauge-label">${esc(g.label)}</span>
+        <div class="env-gauge-track">
+          <div class="env-gauge-fill" style="width:${g.val * 100}%;background:${g.color}"></div>
+        </div>
+        <span class="env-gauge-val">${(g.val * 100).toFixed(0)}%</span>
+      </div>`;
+    }
+  }
+
   container.innerHTML = html || '<span class="emergence-placeholder">No data yet</span>';
 }
 
-// Load initial economy/media/health/institution data
+// Load initial economy/media/health/institution/STS data
 async function loadEconomyMedia() {
   const econData = await safeFetch("/api/economy");
   if (econData) renderEconomyPanel(econData);
@@ -1257,7 +1320,8 @@ async function loadEconomyMedia() {
   if (mediaData) renderMediaPanel(mediaData);
   const healthData = await safeFetch("/api/health");
   const instData = await safeFetch("/api/institutions");
-  renderHealthPanel(healthData, instData);
+  const stsData = await safeFetch("/api/sts");
+  renderHealthPanel(healthData, instData, stsData);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

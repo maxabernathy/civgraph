@@ -494,6 +494,13 @@ def graph_stats(G: nx.Graph) -> dict:
 
 def export_for_d3(G: nx.Graph, highlight: set[str] | None = None) -> dict:
     """Export graph in D3-compatible format."""
+    # Pre-compute lightweight STS scores for all nodes
+    _bc = None
+    try:
+        _bc = nx.betweenness_centrality(G, weight="weight", k=min(100, G.number_of_nodes()))
+    except Exception:
+        _bc = {}
+
     nodes = []
     for n in G.nodes:
         a: Agent = G.nodes[n]["agent"]
@@ -528,6 +535,12 @@ def export_for_d3(G: nx.Graph, highlight: set[str] | None = None) -> dict:
             "membership_count": len(a.institutions.memberships) if a.institutions else 0,
             "board_power": round(a.institutions.board_power, 3) if a.institutions else 0,
             "skill_currency": round(a.institutions.skill_currency, 3) if a.institutions else 0.7,
+            # STS-derived (lightweight)
+            "opp_score": round(
+                _bc.get(n, 0) * 0.4 +
+                (a.institutions.board_power if a.institutions else 0) * 0.3 +
+                a.capital.symbolic * 0.3, 3
+            ),
         })
 
     links = []
