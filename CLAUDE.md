@@ -18,7 +18,7 @@ The `screenshot.py` is a permanent part of the repo -- don't delete it. Extend i
 
 ## Architecture Overview
 
-- `model.py` -- Agent dataclass, city generator (1,000 agents, 9 edge types)
+- `model.py` -- Agent dataclass, city generator (5,000 agents, 9 edge types)
 - `capital.py` -- Bourdieu's four capitals, habitus, lifecycle, intergenerational transmission
 - `economy.py` -- Task-based economic model, 4 tech waves, Autor framework
 - `media.py` -- Print/mass/social media ecosystems, echo chambers, algorithmic bubbles

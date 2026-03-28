@@ -56,7 +56,7 @@ app = FastAPI(title="CivGraph", version="0.1.0")
 
 MAX_EVENT_HISTORY = 200
 MAX_PROPAGATION_STEPS = 20
-MAX_SEARCH_LIMIT = 1000
+MAX_SEARCH_LIMIT = 5000
 SAVE_DIR = Path(__file__).parent / "saves"
 SAVE_DIR.mkdir(exist_ok=True)
 AUTO_SAVE_ENABLED = False
@@ -75,7 +75,7 @@ MEDIA: MediaLandscape | None = None
 def ensure_graph(seed: int | None = 42) -> nx.Graph:
     global GRAPH, ENV, EMERGENCE, MEDIA
     if GRAPH is None:
-        GRAPH = generate_city(1000, seed=seed)
+        GRAPH = generate_city(5000, seed=seed)
         ENV = create_environment(seed)
         MEDIA = create_media_landscape(seed)
         ENV.media_landscape = MEDIA

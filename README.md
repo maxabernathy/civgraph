@@ -1,8 +1,8 @@
 # CivGraph
 
-An agent-based model of urban social dynamics, built on Pierre Bourdieu's theory of capital and habitus, deepened by Actor-Network Theory (Latour, Callon, Law). 1,000 individuals in a mid-scale city form a heterogeneous network where influence, opinion, and power flow through clan ties, professional bonds, institutional memberships, and shared dispositions -- shaped by macro forces of economy, housing, migration, culture, and governance, disrupted by waves of technological change (modeled as non-human actants), refracted through print, mass, and social media, grounded in the social determinants of health, and analyzed through the lens of translation sociology, performativity, and obligatory passage points.
+An agent-based model of urban social dynamics, built on Pierre Bourdieu's theory of capital and habitus, deepened by Actor-Network Theory (Latour, Callon, Law). 5,000 individuals in a mid-scale city form a heterogeneous network where influence, opinion, and power flow through clan ties, professional bonds, institutional memberships, and shared dispositions -- shaped by macro forces of economy, housing, migration, culture, and governance, disrupted by waves of technological change (modeled as non-human actants), refracted through print, mass, and social media, grounded in the social determinants of health, and analyzed through the lens of translation sociology, performativity, and obligatory passage points.
 
-![The social graph of a city -- 1,000 agents colored by clan affiliation, with economy, media, and health panels visible](docs/01-main-graph.png)
+![The social graph of a city -- 5,000 agents colored by clan affiliation, with economy, media, and health panels visible](docs/01-main-graph.png)
 
 ## Quick Start
 
@@ -382,7 +382,7 @@ environment.py   -- 26 indicators across 7 domains, endogenous
                     dynamics, bidirectional agent coupling.
 capital.py       -- Bourdieu's four capitals, habitus, lifecycle,
                     intergenerational transmission.
-model.py         -- Agent dataclass, city generator (1,000 agents,
+model.py         -- Agent dataclass, city generator (5,000 agents,
                     9 edge types), D3 export.
 events.py        -- Capital-aware BFS propagation, media amplification,
                     coalition detection.

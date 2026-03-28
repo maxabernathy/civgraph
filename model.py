@@ -1,7 +1,7 @@
 """
 CivGraph — Agent-based modeling on a social graph.
 
-Core model: 1000 individuals in a mid-scale city, each with clan ties,
+Core model: 5000 individuals in a mid-scale city, each with clan ties,
 interests, political leanings, Bourdieusian capital, habitus, task-based
 economic activities, media consumption, health status, institutional
 memberships (boards, associations, clubs), and lifecycle-dependent
