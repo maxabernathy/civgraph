@@ -30,17 +30,21 @@ from emergence import (
     EmergenceTracker, DIMENSION_META as EMERGENCE_META,
     advance_emergence_dynamics, COUPLING_MATRIX,
 )
+from economy import get_tech_state, TECH_WAVES, OCCUPATION_TASKS
+from media import (
+    MediaLandscape, create_media_landscape, compute_media_stats,
+)
 import random as _random
 
 import networkx as nx
 
-app = FastAPI(title="CivGraph", version="0.2.0")
+app = FastAPI(title="CivGraph", version="0.3.0")
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
 MAX_EVENT_HISTORY = 200
 MAX_PROPAGATION_STEPS = 20
-MAX_SEARCH_LIMIT = 500
+MAX_SEARCH_LIMIT = 1000
 
 # ── State ────────────────────────────────────────────────────────────────────
 
@@ -48,13 +52,17 @@ GRAPH: nx.Graph | None = None
 EVENT_HISTORY: list[dict] = []
 ENV: Environment | None = None
 EMERGENCE: EmergenceTracker | None = None
+MEDIA: MediaLandscape | None = None
 
 
 def ensure_graph(seed: int | None = 42) -> nx.Graph:
-    global GRAPH, ENV, EMERGENCE
+    global GRAPH, ENV, EMERGENCE, MEDIA
     if GRAPH is None:
-        GRAPH = generate_city(500, seed=seed)
+        GRAPH = generate_city(1000, seed=seed)
         ENV = create_environment(seed)
+        MEDIA = create_media_landscape(seed)
+        ENV.media_landscape = MEDIA
+        GRAPH._media_landscape = MEDIA  # attach for event propagation
         EMERGENCE = EmergenceTracker()
         EMERGENCE.snapshot(GRAPH, year=0)
     return GRAPH
@@ -111,9 +119,12 @@ async def index():
 
 @app.post("/api/reset")
 async def reset_graph(seed: int = 42):
-    global GRAPH, EVENT_HISTORY, ENV, EMERGENCE
-    GRAPH = generate_city(500, seed=seed)
+    global GRAPH, EVENT_HISTORY, ENV, EMERGENCE, MEDIA
+    GRAPH = generate_city(1000, seed=seed)
     ENV = create_environment(seed)
+    MEDIA = create_media_landscape(seed)
+    ENV.media_landscape = MEDIA
+    GRAPH._media_landscape = MEDIA
     EMERGENCE = EmergenceTracker()
     EMERGENCE.snapshot(GRAPH, year=0)
     EVENT_HISTORY = []
@@ -201,6 +212,9 @@ async def get_meta():
         "social_classes": [c.value for c in SocialClass],
         "life_phases": [p.value for p in LifePhase],
         "education_tracks": [t.value for t in EducationTrack],
+        "occupations": list(OCCUPATION_TASKS.keys()),
+        "tech_waves": list(TECH_WAVES.keys()),
+        "media_types": ["print", "mass", "social"],
     }
 
 
@@ -378,6 +392,117 @@ async def get_agent_emergence(agent_id: str):
         all_scores = compute_agent_emergence_scores(G)
         scores = all_scores.get(agent_id, {})
     return scores
+
+
+# ── Economy endpoints ─────────────────────────────────────────────────────
+
+@app.get("/api/economy")
+async def get_economy():
+    """Current technology state and aggregate economic indicators."""
+    G = ensure_graph()
+    agents = [G.nodes[n]["agent"] for n in G.nodes]
+    econs = [a.economy for a in agents if a.economy]
+    n = len(econs) or 1
+    avg_income = sum(e.income for e in econs) / n
+    avg_disp = sum(e.displacement_risk for e in econs) / n
+    avg_prod = sum(e.productivity for e in econs) / n
+    avg_adapt = sum(e.tech_adaptation for e in econs) / n
+
+    # By occupation
+    by_occ: dict[str, dict] = {}
+    for a in agents:
+        if not a.economy:
+            continue
+        occ = a.occupation
+        if occ not in by_occ:
+            by_occ[occ] = {"income": [], "displacement": [], "count": 0}
+        by_occ[occ]["income"].append(a.economy.income)
+        by_occ[occ]["displacement"].append(a.economy.displacement_risk)
+        by_occ[occ]["count"] += 1
+    occ_summary = {
+        occ: {
+            "count": d["count"],
+            "avg_income": round(sum(d["income"]) / d["count"], 3),
+            "avg_displacement": round(sum(d["displacement"]) / d["count"], 3),
+        }
+        for occ, d in by_occ.items()
+    }
+
+    return {
+        "tech_state": get_tech_state().to_dict(),
+        "avg_income": round(avg_income, 3),
+        "avg_displacement_risk": round(avg_disp, 3),
+        "avg_productivity": round(avg_prod, 3),
+        "avg_tech_adaptation": round(avg_adapt, 3),
+        "by_occupation": occ_summary,
+    }
+
+
+@app.get("/api/economy/agent/{agent_id}")
+async def get_agent_economy_detail(agent_id: str):
+    G = ensure_graph()
+    _validate_agent_id(G, agent_id)
+    agent = get_agent(G, agent_id)
+    if agent.economy:
+        return agent.economy.to_dict()
+    return {}
+
+
+@app.get("/api/economy/tech")
+async def get_tech():
+    return get_tech_state().to_dict()
+
+
+@app.get("/api/economy/occupations")
+async def get_occupation_tasks():
+    """Return task decomposition for all occupations."""
+    result = {}
+    for occ, tasks in OCCUPATION_TASKS.items():
+        result[occ] = [
+            {
+                "name": t.name,
+                "cognitive": t.cognitive,
+                "routine": t.routine,
+                "interpersonal": t.interpersonal,
+                "time_share": t.time_share,
+                "base_value": t.base_value,
+            }
+            for t in tasks
+        ]
+    return result
+
+
+# ── Media endpoints ──────────────────────────────────────────────────────
+
+@app.get("/api/media")
+async def get_media():
+    """Current media landscape and aggregate consumption stats."""
+    G = ensure_graph()
+    agents = [G.nodes[n]["agent"] for n in G.nodes]
+    all_media = [a.media for a in agents if a.media]
+    global MEDIA
+    if MEDIA is None:
+        MEDIA = create_media_landscape()
+    return compute_media_stats(MEDIA, all_media)
+
+
+@app.get("/api/media/landscape")
+async def get_media_landscape():
+    ensure_graph()
+    global MEDIA
+    if MEDIA is None:
+        MEDIA = create_media_landscape()
+    return MEDIA.to_dict()
+
+
+@app.get("/api/media/agent/{agent_id}")
+async def get_agent_media(agent_id: str):
+    G = ensure_graph()
+    _validate_agent_id(G, agent_id)
+    agent = get_agent(G, agent_id)
+    if agent.media:
+        return agent.media.to_dict()
+    return {}
 
 
 # ── WebSocket for live propagation ──────────────────────────────────────────

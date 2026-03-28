@@ -1196,6 +1196,8 @@ def adaptive_rewire(G: nx.Graph, rng: random.Random, rate: float = 0.05):
             worst_nb = None
             worst_score = 0
             for nb in neighbors:
+                if not G.has_edge(nid, nb):
+                    continue
                 nb_agent = G.nodes[nb]["agent"]
                 # Political distance
                 pol_dist = abs(agent.politics.numeric - nb_agent.politics.numeric)
@@ -1243,20 +1245,23 @@ def adaptive_rewire(G: nx.Graph, rng: random.Random, rate: float = 0.05):
         # ── 3. Triadic closure ─────────────────────────────────────────
         if rng.random() < 0.15 and neighbors:
             friend = rng.choice(neighbors)
-            fof_list = [f for f in G.neighbors(friend)
-                        if f != nid and not G.has_edge(nid, f)]
-            if fof_list:
-                fof = rng.choice(fof_list)
-                w1 = G.edges[nid, friend].get("weight", 0.3)
-                w2 = G.edges[friend, fof].get("weight", 0.3)
-                if w1 > 0 and w2 > 0:
-                    new_w = min(w1, w2) * 0.6
-                    G.add_edge(nid, fof, weight=round(new_w, 3), rel="friendship")
-                    edges_added += 1
+            if G.has_edge(nid, friend):
+                fof_list = [f for f in G.neighbors(friend)
+                            if f != nid and not G.has_edge(nid, f)]
+                if fof_list:
+                    fof = rng.choice(fof_list)
+                    w1 = G.edges[nid, friend].get("weight", 0.3)
+                    w2 = G.edges[friend, fof].get("weight", 0.3)
+                    if w1 > 0 and w2 > 0:
+                        new_w = min(w1, w2) * 0.6
+                        G.add_edge(nid, fof, weight=round(new_w, 3), rel="friendship")
+                        edges_added += 1
 
         # ── 4. Weak tie decay ──────────────────────────────────────────
         if rng.random() < 0.1:
             for nb in neighbors:
+                if not G.has_edge(nid, nb):
+                    continue
                 edge_w = G.edges[nid, nb].get("weight", 0.5)
                 if 0 < edge_w < 0.1 and rng.random() < 0.3:
                     G.remove_edge(nid, nb)

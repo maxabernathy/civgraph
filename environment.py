@@ -353,12 +353,76 @@ def event_affects_environment(env: Environment, event_type: str, intensity: floa
 def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
                         seed: int | None = None) -> dict:
     """Advance the environment by N years with full agent coupling."""
+    from economy import advance_economy_tick, economy_affect_capital, economy_from_environment, TECH_WAVES, compute_disruption
+    from media import (
+        evolve_media_landscape, media_affect_agent_opinion,
+        media_affect_environment, environment_affect_media,
+        update_algorithmic_bubble, compute_media_stats,
+    )
+
     rng = random.Random(seed) if seed else random.Random()
     summaries = []
+
+    # Access or create media landscape (stored on env)
+    if not hasattr(env, "media_landscape"):
+        from media import create_media_landscape
+        env.media_landscape = create_media_landscape(seed)
+    ml = env.media_landscape
 
     for _ in range(years):
         env.year += 1
         _evolve_indicators(env, rng)
+
+        # ── Economy tick: advance tech, recompute disruption ───────
+        agents = [G.nodes[n]["agent"] for n in G.nodes]
+        agent_econs = [a.economy for a in agents if a.economy]
+        econ_summary = advance_economy_tick(agent_econs)
+
+        # Economy → capital coupling
+        for a in agents:
+            if a.economy:
+                economy_from_environment(a.economy, env.indicators)
+                economy_affect_capital(a.capital, a.economy)
+
+        # Tech disruption feeds into unemployment
+        avg_disp = econ_summary.get("avg_displacement_risk", 0)
+        env.indicators["unemployment"] += avg_disp * 0.03
+        env.indicators["unemployment"] = max(0.02, min(0.25, env.indicators["unemployment"]))
+        # AI boosts GDP growth
+        from economy import TECH_WAVES as TW
+        ai_adoption = TW.get("ai_ml")
+        if ai_adoption:
+            env.indicators["gdp_growth"] += ai_adoption.adoption * 0.005
+            env.indicators["gdp_growth"] = max(-0.05, min(0.08, env.indicators["gdp_growth"]))
+
+        # ── Media tick: evolve landscape, affect agents ────────────
+        evolve_media_landscape(ml, rng)
+        media_affect_environment(ml, env.indicators)
+        environment_affect_media(ml, env.indicators)
+
+        # Media → agent opinion effects
+        for node_id in G.nodes:
+            agent = G.nodes[node_id]["agent"]
+            if agent.media and agent.opinion_state:
+                # Gather neighbor opinions for social media filtering
+                neighbor_ops: dict[str, list[float]] = {}
+                for nid in G.neighbors(node_id):
+                    na = G.nodes[nid]["agent"]
+                    for t, o in na.opinion_state.items():
+                        neighbor_ops.setdefault(t, []).append(o)
+
+                deltas = media_affect_agent_opinion(
+                    agent.opinion_state, agent.media, ml,
+                    agent.politics.numeric, agent.openness,
+                    neighbor_ops, rng,
+                )
+                for topic, d in deltas.items():
+                    agent.opinion_state[topic] = max(-1, min(1, agent.opinion_state[topic] + d))
+
+                # Update algorithmic bubble
+                update_algorithmic_bubble(agent.media, agent.opinion_state)
+
+        # ── Standard environment ↔ agent coupling ─────────────────
         environment_affect_agents(env, G)
         agents_affect_environment(env, G)
 
@@ -370,15 +434,21 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
             new_phase = life_phase_from_age(agent.age)
             if new_phase != agent.life_phase:
                 agent.life_phase = new_phase
-                # Reapply lifecycle curve to base capital
                 agent.capital = apply_lifecycle(agent.capital, new_phase)
 
         env.record()
         summaries.append(env.snapshot())
+
+    # Collect media stats
+    all_media = [G.nodes[n]["agent"].media for n in G.nodes
+                 if G.nodes[n]["agent"].media]
+    media_stats = compute_media_stats(ml, all_media) if all_media else {}
 
     return {
         "years_advanced": years,
         "current_year": env.year,
         "current": env.snapshot(),
         "summaries": summaries,
+        "economy": econ_summary if years > 0 else {},
+        "media": media_stats,
     }
