@@ -8,6 +8,7 @@ for interacting with the agent-based model.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -37,6 +38,10 @@ from media import (
 from health import compute_health_stats
 from agency import compute_sts_snapshot, compute_passage_points, compute_network_capital
 from transactions import LEDGER, TxType, TX_COLORS, TX_LABELS
+from persistence import (
+    save_simulation, load_simulation, list_saves,
+    export_csv_bundle, export_gexf, export_graphml,
+)
 from institutions import (
     compute_institution_stats, InstitutionType, INSTITUTION_PROFILES,
     INSTITUTION_NAMES,
@@ -52,6 +57,11 @@ app = FastAPI(title="CivGraph", version="0.3.0")
 MAX_EVENT_HISTORY = 200
 MAX_PROPAGATION_STEPS = 20
 MAX_SEARCH_LIMIT = 1000
+SAVE_DIR = Path(__file__).parent / "saves"
+SAVE_DIR.mkdir(exist_ok=True)
+AUTO_SAVE_ENABLED = False
+AUTO_SAVE_INTERVAL = 5
+TICK_COUNT = 0
 
 # ── State ────────────────────────────────────────────────────────────────────
 
@@ -313,6 +323,21 @@ async def advance_simulation(body: TickRequest):
     snap = emg.snapshot(G, year=env.year)
     result["emergence"] = snap.to_dict()
     result["emergence_dynamics"] = dynamics
+    # Auto-save
+    global TICK_COUNT
+    TICK_COUNT += body.years
+    if AUTO_SAVE_ENABLED and TICK_COUNT % AUTO_SAVE_INTERVAL == 0:
+        try:
+            save_simulation(
+                SAVE_DIR / f"autosave_y{env.year}.json.gz",
+                G, env, emg, MEDIA, EVENT_HISTORY, "autosave"
+            )
+            # Prune old autosaves (keep last 3)
+            autosaves = sorted(SAVE_DIR.glob("autosave_*.json.gz"), key=lambda p: p.stat().st_mtime)
+            while len(autosaves) > 3:
+                autosaves.pop(0).unlink()
+        except Exception:
+            pass  # don't break the tick if autosave fails
     return result
 
 
@@ -660,6 +685,136 @@ async def get_transactions(
 @app.get("/api/transactions/summary")
 async def get_transaction_summary():
     return LEDGER.summary()
+
+
+# ── Persistence endpoints ─────────────────────────────────────────────────
+
+class SaveRequest(BaseModel):
+    name: str = Field(default="", max_length=100)
+
+
+class LoadRequest(BaseModel):
+    filename: str = Field(max_length=200)
+
+
+class AutoSaveConfig(BaseModel):
+    enabled: bool = True
+    interval: int = Field(default=5, ge=1, le=100)
+
+
+def _safe_filename(name: str) -> bool:
+    """Reject path traversal attempts."""
+    return name and "/" not in name and "\\" not in name and ".." not in name
+
+
+@app.post("/api/save")
+async def save_state(body: SaveRequest):
+    """Save current simulation state to disk."""
+    G = ensure_graph()
+    env = ensure_env()
+    emg = ensure_emergence()
+    global MEDIA
+    label = body.name or ""
+    year = env.year if env else 0
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"civgraph_y{year}_{ts}.json.gz"
+    meta = save_simulation(SAVE_DIR / filename, G, env, emg, MEDIA, EVENT_HISTORY, label)
+    return {"status": "ok", **meta}
+
+
+@app.get("/api/saves")
+async def get_saves():
+    """List available save files."""
+    return list_saves(SAVE_DIR)
+
+
+@app.post("/api/load")
+async def load_state(body: LoadRequest):
+    """Load simulation state from a save file."""
+    if not _safe_filename(body.filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    filepath = SAVE_DIR / body.filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Save file not found")
+    global GRAPH, ENV, EMERGENCE, MEDIA, EVENT_HISTORY
+    result = load_simulation(filepath)
+    GRAPH = result["graph"]
+    ENV = result["environment"]
+    EMERGENCE = result["emergence"]
+    MEDIA = result["media"]
+    EVENT_HISTORY = result["event_history"]
+    return {
+        "status": "ok",
+        "simulation_year": result["simulation_year"],
+        "label": result["label"],
+        "stats": graph_stats(GRAPH) if GRAPH else {},
+    }
+
+
+@app.delete("/api/saves/{filename}")
+async def delete_save(filename: str):
+    """Delete a save file."""
+    if not _safe_filename(filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    filepath = SAVE_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Save file not found")
+    filepath.unlink()
+    return {"status": "ok"}
+
+
+@app.get("/api/autosave")
+async def get_autosave():
+    return {"enabled": AUTO_SAVE_ENABLED, "interval": AUTO_SAVE_INTERVAL}
+
+
+@app.post("/api/autosave")
+async def set_autosave(body: AutoSaveConfig):
+    global AUTO_SAVE_ENABLED, AUTO_SAVE_INTERVAL
+    AUTO_SAVE_ENABLED = body.enabled
+    AUTO_SAVE_INTERVAL = body.interval
+    return {"enabled": AUTO_SAVE_ENABLED, "interval": AUTO_SAVE_INTERVAL}
+
+
+@app.get("/api/export/csv")
+async def export_csv():
+    """Export current state as a ZIP of CSV files."""
+    from fastapi.responses import Response
+    G = ensure_graph()
+    env = ensure_env()
+    emg = ensure_emergence()
+    data = export_csv_bundle(G, env, emg, EVENT_HISTORY)
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=civgraph_export.zip"},
+    )
+
+
+@app.get("/api/export/gexf")
+async def export_gexf_file():
+    """Export graph in GEXF format (Gephi native)."""
+    from fastapi.responses import Response
+    G = ensure_graph()
+    data = export_gexf(G)
+    return Response(
+        content=data,
+        media_type="application/xml",
+        headers={"Content-Disposition": "attachment; filename=civgraph.gexf"},
+    )
+
+
+@app.get("/api/export/graphml")
+async def export_graphml_file():
+    """Export graph in GraphML format (universal graph exchange)."""
+    from fastapi.responses import Response
+    G = ensure_graph()
+    data = export_graphml(G)
+    return Response(
+        content=data,
+        media_type="application/xml",
+        headers={"Content-Disposition": "attachment; filename=civgraph.graphml"},
+    )
 
 
 # ── WebSocket for live propagation ──────────────────────────────────────────

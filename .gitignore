@@ -5,3 +5,5 @@ capture_all.py
 build/
 dist/
 *.spec.bak
+saves/*.json.gz
+exports/
