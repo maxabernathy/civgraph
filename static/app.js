@@ -14,6 +14,7 @@ let nodeSizeMultiplier = 1.0;
 let linkOpacity = 0.15;
 let ws = null;
 let eventHistory = [];  // local mirror of fired events
+let microscopeWin = null;
 
 // ── Security: HTML escaping ─────────────────────────────────────────────────
 
@@ -602,6 +603,25 @@ function setupEvents() {
   // Reset
   document.getElementById("btn-reset").addEventListener("click", resetSimulation);
 
+  // Microscope — open in separate window
+  document.getElementById("btn-microscope").addEventListener("click", () => {
+    microscopeWin = window.open("/microscope", "civgraph-microscope",
+      "width=1200,height=700,menubar=no,toolbar=no,location=no,status=no");
+  });
+
+  // Listen for microscope highlight requests
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "microscope_highlight" && e.data.agentIds) {
+      const ids = new Set(e.data.agentIds);
+      nodeGroup.selectAll("g.node").classed("highlighted", (d) => ids.has(d.id));
+      linkGroup.selectAll("line").classed("highlighted", (l) => {
+        const sid = typeof l.source === "object" ? l.source.id : l.source;
+        const tid = typeof l.target === "object" ? l.target.id : l.target;
+        return ids.has(sid) || ids.has(tid);
+      });
+    }
+  });
+
   // Resize handler — rebuild graph on window resize
   let resizeTimer;
   window.addEventListener("resize", () => {
@@ -979,6 +999,11 @@ async function advanceTick() {
   if (result) {
     const stsData = await safeFetch("/api/sts");
     renderHealthPanel(result.health || null, result.institutions || null, stsData);
+  }
+
+  // Notify Microscope window of tick completion
+  if (microscopeWin && !microscopeWin.closed) {
+    microscopeWin.postMessage({ type: "tick_complete" }, "*");
   }
 
   // Refresh graph data to reflect capital/economy/media changes

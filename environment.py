@@ -402,11 +402,21 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
         agent_econs = [a.economy for a in agents if a.economy]
         econ_summary = advance_economy_tick(agent_econs)
 
-        # Economy → capital coupling
+        # Economy → capital coupling (with transaction recording)
+        from transactions import LEDGER, TxType
+        LEDGER.clear()
+
         for a in agents:
             if a.economy:
+                old_income = a.economy.income
+                old_disp = a.economy.displacement_risk
                 economy_from_environment(a.economy, env.indicators)
                 economy_affect_capital(a.capital, a.economy)
+                # Record displacement transactions
+                if abs(a.economy.displacement_risk - old_disp) > 0.005:
+                    LEDGER.record(TxType.TASK_DISPLACEMENT, "AI/ML + Robotics", "",
+                        a.name, a.id, a.economy.displacement_risk - old_disp,
+                        f"displacement {old_disp:.1%} → {a.economy.displacement_risk:.1%} ({a.occupation})")
 
         # Tech disruption feeds into unemployment
         avg_disp = econ_summary.get("avg_displacement_risk", 0)
@@ -441,10 +451,20 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
                     neighbor_ops, rng,
                 )
                 for topic, d in deltas.items():
+                    if abs(d) > 0.005:
+                        media_src = "social media" if agent.media.social_exposure > 0.4 else "mass media" if agent.media.mass_exposure > 0.4 else "print media"
+                        LEDGER.record(TxType.MEDIA_EFFECT, media_src, "",
+                            agent.name, agent.id, d,
+                            f"topic: {topic} | opinion {agent.opinion_state[topic]:.2f} → {max(-1,min(1,agent.opinion_state[topic]+d)):.2f}")
                     agent.opinion_state[topic] = max(-1, min(1, agent.opinion_state[topic] + d))
 
                 # Update algorithmic bubble
+                old_bubble = agent.media.algorithmic_bubble
                 update_algorithmic_bubble(agent.media, agent.opinion_state)
+                if agent.media.algorithmic_bubble - old_bubble > 0.005:
+                    LEDGER.record(TxType.ECHO_CHAMBER, "social media", "",
+                        agent.name, agent.id, agent.media.algorithmic_bubble - old_bubble,
+                        f"bubble {old_bubble:.2f} → {agent.media.algorithmic_bubble:.2f}")
 
         # ── Health tick: evolve indicators, affect agents ────────────
         from health import (
@@ -467,6 +487,8 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
         for a in agents:
             # Health evolution
             if a.health:
+                old_physical = a.health.physical_health
+                old_chronic = a.health.chronic_condition
                 disp_risk = a.economy.displacement_risk if a.economy else 0
                 evolve_agent_health(
                     a.health, a.age, a.habitus.current_class.rank,
@@ -475,18 +497,49 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
                 )
                 health_affect_capital(a.health, a.capital)
                 health_affect_economy(a.health, a.economy)
+                if not old_chronic and a.health.chronic_condition:
+                    LEDGER.record(TxType.CHRONIC_ONSET, f"age {a.age} / {a.habitus.current_class.value}", "",
+                        a.name, a.id, -0.2,
+                        f"chronic condition onset | physical {old_physical:.2f} → {a.health.physical_health:.2f}")
+                elif abs(a.health.physical_health - old_physical) > 0.02:
+                    LEDGER.record(TxType.HEALTH_CHANGE, "health system", "",
+                        a.name, a.id, a.health.physical_health - old_physical,
+                        f"physical {old_physical:.2f} → {a.health.physical_health:.2f} | stress {a.health.stress_level:.2f}")
 
             # Institutional evolution
             if a.institutions:
+                old_n = len(a.institutions.memberships)
                 evolve_institutional_profile(
                     a.institutions, a.age, a.habitus.current_class.rank,
                     a.habitus.education_track.value, rng,
                 )
                 institutions_affect_capital(a.institutions, a.capital)
                 institutions_affect_economy(a.institutions, a.economy)
+                for m in a.institutions.memberships:
+                    if m.years_active == 0 and len(a.institutions.memberships) > old_n:
+                        LEDGER.record(TxType.TIE_FORMED, a.name, a.id,
+                            m.institution_name, "", 0.1,
+                            f"joined {m.institution_name} ({m.institution_type.value})")
+                    if m.economic_interest > 0.15:
+                        LEDGER.record(TxType.INSTITUTIONAL_CAP, m.institution_name, "",
+                            a.name, a.id, m.economic_interest * 0.01,
+                            f"{m.institution_name} | econ interest {m.economic_interest:.0%}{'  LEADER' if m.leadership_role else ''}")
 
         # ── Standard environment ↔ agent coupling ─────────────────
+        # Record env→agent effects for significant cases
+        for node_id in G.nodes:
+            a = G.nodes[node_id]["agent"]
+            old_econ = a.capital.economic
+            old_sym = a.capital.symbolic
         environment_affect_agents(env, G)
+        # Sample a few env→agent effects for the ledger
+        sample_agents = agents[:50]  # record first 50 to keep ledger manageable
+        for a in sample_agents:
+            econ_delta = a.capital.economic - (old_econ if a == sample_agents[0] else a.capital.economic)
+            if abs(a.capital.economic - 0.5) > 0.3:
+                LEDGER.record(TxType.ENV_AGENT, "GDP + unemployment", "",
+                    a.name, a.id, env.indicators.get("gdp_growth", 0),
+                    f"econ capital: {a.capital.economic:.3f} | class: {a.habitus.current_class.value}")
         agents_affect_environment(env, G)
 
         # Age agents by 1 year
@@ -520,4 +573,5 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
         "media": media_stats,
         "health": health_stats,
         "institutions": inst_stats,
+        "transactions": LEDGER.summary(),
     }
