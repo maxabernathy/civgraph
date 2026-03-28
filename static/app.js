@@ -842,7 +842,7 @@ async function openArtifact(type) {
 
   const titles = {
     anatomies: "ANATOMIES OF AGENCY",
-    topography: "SURVEY OF INFLUENCE",
+    topography: "INTERLOCKING DIRECTORATES",
     constellation: "CONSTELLATIONS OF CLAN",
     heatmap: "FABRIC OF OPINION",
     seismograph: "SEISMOGRAPH OF EVENTS",
@@ -867,7 +867,9 @@ async function openArtifact(type) {
       Artifacts.renderAnatomies(nodes);
       break;
     case "topography":
-      Artifacts.renderTopography(nodes);
+      // Fetch full agent data with institutions for the board visualization
+      const agentsFull = await safeFetch("/api/search?limit=1000");
+      Artifacts.renderTopography(agentsFull || nodes);
       break;
     case "constellation":
       Artifacts.renderConstellation(nodes);
