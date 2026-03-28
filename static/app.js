@@ -107,8 +107,11 @@ function nodeColor(d) {
   }
 }
 
+// Scale factor based on agent count — smaller nodes at higher N
+let densityScale = 1.0;
+
 function nodeRadius(d) {
-  const base = 2 + Math.sqrt(d.influence) * 6 + Math.sqrt(d.degree) * 0.8;
+  const base = (1.5 + Math.sqrt(d.influence) * 4 + Math.sqrt(d.degree) * 0.5) * densityScale;
   return base * nodeSizeMultiplier;
 }
 
@@ -165,11 +168,31 @@ async function init() {
 // ── D3 Force Graph ──────────────────────────────────────────────────────────
 
 let svg, g, linkGroup, nodeGroup, zoomBehavior;
+let visibleLinks = null; // subset of links to render (null = all)
 
 function buildGraph() {
   const container = document.getElementById("graph-container");
   const width = container.clientWidth;
   const height = container.clientHeight;
+
+  const nNodes = graphData.nodes.length;
+  const nLinks = graphData.links.length;
+
+  // Density-aware scaling: smaller nodes and weaker forces at high N
+  densityScale = Math.min(1.0, Math.sqrt(1000 / nNodes));
+  // Adaptive link opacity: lower at high edge counts
+  linkOpacity = Math.min(0.15, 150 / Math.max(1, nLinks));
+  document.getElementById("link-opacity").value = linkOpacity;
+  document.getElementById("link-opacity-val").textContent = linkOpacity.toFixed(2);
+
+  // Only render a fraction of edges when there are too many
+  visibleLinks = graphData.links;
+  if (nLinks > 15000) {
+    const sorted = [...graphData.links].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
+    const cutoff = Math.floor(nLinks * 0.3);
+    const kept = new Set(sorted.slice(0, cutoff));
+    visibleLinks = graphData.links.filter(l => kept.has(l) || l.weight < 0);
+  }
 
   svg = d3.select("#graph-svg").attr("viewBox", [0, 0, width, height]);
   svg.selectAll("*").remove();
@@ -177,7 +200,7 @@ function buildGraph() {
   // Zoom
   zoomBehavior = d3
     .zoom()
-    .scaleExtent([0.1, 8])
+    .scaleExtent([0.05, 12])
     .on("zoom", (event) => {
       g.attr("transform", event.transform);
     });
@@ -187,9 +210,10 @@ function buildGraph() {
   linkGroup = g.append("g").attr("class", "links");
   nodeGroup = g.append("g").attr("class", "nodes");
 
-  // Scale forces to viewport
+  // Scale forces to viewport and agent count
   const dim = Math.min(width, height);
-  const chargeStrength = -20 - dim * 0.015;
+  const chargeStrength = (-15 - dim * 0.01) * (1 + Math.log10(nNodes / 500));
+  const linkDistScale = 0.5 + 500 / nNodes;  // shorter distances at high N
 
   // Force simulation
   simulation = d3
@@ -201,14 +225,14 @@ function buildGraph() {
         .id((d) => d.id)
         .distance((d) => {
           const w = Math.abs(d.weight);
-          return 40 + (1 - w) * 80;
+          return (30 + (1 - w) * 60) * linkDistScale;
         })
-        .strength((d) => Math.abs(d.weight) * 0.3)
+        .strength((d) => Math.abs(d.weight) * 0.2)
     )
     .force("charge", d3.forceManyBody().strength(chargeStrength).distanceMax(dim * 0.5))
     .force("center", d3.forceCenter(width / 2, height / 2))
-    .force("collision", d3.forceCollide().radius((d) => nodeRadius(d) + 1))
-    .alphaDecay(0.02)
+    .force("collision", d3.forceCollide().radius((d) => nodeRadius(d) + 0.5 * densityScale))
+    .alphaDecay(nNodes > 2000 ? 0.04 : 0.02)
     .on("tick", ticked);
 
   renderLinks();
@@ -216,9 +240,10 @@ function buildGraph() {
 }
 
 function renderLinks() {
+  const linksToRender = visibleLinks || graphData.links;
   const link = linkGroup
     .selectAll("line")
-    .data(graphData.links, (d) => d.source.id + "-" + d.target.id);
+    .data(linksToRender, (d) => (d.source.id || d.source) + "-" + (d.target.id || d.target));
 
   link.exit().remove();
 
@@ -688,7 +713,7 @@ async function refreshNodeOpinions() {
   // (more efficient: just re-fetch graph which includes opinion data)
   // The graph endpoint doesn't include opinion_state, so we need the agents endpoint
   // For efficiency, fetch a sample to populate _opinions
-  const allAgents = await fetch("/api/search?limit=5000").then((r) => r.json());
+  const allAgents = await fetch("/api/search?limit=3000").then((r) => r.json());
   const agentMap = {};
   for (const a of allAgents) agentMap[a.id] = a;
   for (const n of graphData.nodes) {
@@ -869,7 +894,7 @@ async function openArtifact(type) {
       break;
     case "topography":
       // Fetch full agent data with institutions for the board visualization
-      const agentsFull = await safeFetch("/api/search?limit=5000");
+      const agentsFull = await safeFetch("/api/search?limit=3000");
       Artifacts.renderTopography(agentsFull || nodes);
       break;
     case "constellation":

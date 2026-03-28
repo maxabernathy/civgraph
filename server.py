@@ -57,6 +57,7 @@ app = FastAPI(title="CivGraph", version="0.1.0")
 MAX_EVENT_HISTORY = 200
 MAX_PROPAGATION_STEPS = 20
 MAX_SEARCH_LIMIT = 5000
+DEFAULT_AGENTS = 3000
 SAVE_DIR = Path(__file__).parent / "saves"
 SAVE_DIR.mkdir(exist_ok=True)
 AUTO_SAVE_ENABLED = False
@@ -75,7 +76,7 @@ MEDIA: MediaLandscape | None = None
 def ensure_graph(seed: int | None = 42) -> nx.Graph:
     global GRAPH, ENV, EMERGENCE, MEDIA
     if GRAPH is None:
-        GRAPH = generate_city(5000, seed=seed)
+        GRAPH = generate_city(DEFAULT_AGENTS, seed=seed)
         ENV = create_environment(seed)
         MEDIA = create_media_landscape(seed)
         ENV.media_landscape = MEDIA
@@ -140,9 +141,10 @@ async def microscope():
 # ── REST API ─────────────────────────────────────────────────────────────────
 
 @app.post("/api/reset")
-async def reset_graph(seed: int = 42):
+async def reset_graph(seed: int = 42, agents: int = Query(default=0, ge=0, le=10000)):
     global GRAPH, EVENT_HISTORY, ENV, EMERGENCE, MEDIA
-    GRAPH = generate_city(1000, seed=seed)
+    n = agents if agents > 0 else DEFAULT_AGENTS
+    GRAPH = generate_city(n, seed=seed)
     ENV = create_environment(seed)
     MEDIA = create_media_landscape(seed)
     ENV.media_landscape = MEDIA
