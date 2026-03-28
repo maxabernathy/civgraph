@@ -286,12 +286,12 @@ const Artifacts = (() => {
     ctx.fillText(
       "Core dot = agency (influence x assertiveness).  " +
       "Four ring arcs = capital: green = economic, purple = cultural, blue = social, ochre = symbolic.  " +
-      "Arc length = capital volume.",
+      "Inner arc = health (green = good, red = poor; X = chronic condition).",
       30, ly + 18
     );
     ctx.fillText(
-      "Spokes = intentions (interest domains at fixed angles).  Glyph rotation = political lean.  " +
-      "Openness gap at top.  Stipple density = network degree.  Ink color = clan.",
+      "Spokes = intentions (interest domains).  Glyph rotation = political lean.  " +
+      "Ochre ticks = institutional memberships.  Stipple density = network degree.  Ink color = clan.",
       30, ly + 30
     );
 
@@ -411,6 +411,46 @@ const Artifacts = (() => {
     ctx.lineTo(gapLen, -(ringR + 4));
     ctx.stroke();
     ctx.globalAlpha = 1;
+
+    // ── Health ring (inner arc showing physical health) ──────────────
+    const healthVal = agent.health_composite || 0.75;
+    const healthArc = healthVal * Math.PI * 2;
+    const healthR = maxR * 0.30;
+    ctx.strokeStyle = healthVal > 0.5 ? VERDIGRIS : OXIDE;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.arc(0, 0, healthR, -Math.PI / 2, -Math.PI / 2 + healthArc);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Chronic condition mark: small X inside health ring
+    if (agent.chronic_condition) {
+      ctx.strokeStyle = OXIDE;
+      ctx.lineWidth = 0.6;
+      const cm = healthR * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(-cm, -cm); ctx.lineTo(cm, cm);
+      ctx.moveTo(cm, -cm); ctx.lineTo(-cm, cm);
+      ctx.stroke();
+    }
+
+    // ── Board/institution marks (small ticks on outer ring) ────────
+    const nMemb = agent.membership_count || 0;
+    if (nMemb > 0) {
+      ctx.strokeStyle = OCHRE;
+      ctx.lineWidth = 0.8;
+      ctx.globalAlpha = 0.6;
+      for (let mi = 0; mi < Math.min(nMemb, 4); mi++) {
+        const a = -Math.PI / 2 + mi * (Math.PI / 6);
+        const ir = maxR * 0.82;
+        const or = maxR * 0.92;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * ir, Math.sin(a) * ir);
+        ctx.lineTo(Math.cos(a) * or, Math.sin(a) * or);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
 
     // ── Core dot (AGENCY: influence x assertiveness) ────────────────
     const coreR = 1.5 + influence * assertiveness * maxR * 0.32;
@@ -569,16 +609,32 @@ const Artifacts = (() => {
       ctx.globalAlpha = 1;
     });
 
-    // Plot agents as small circles with crosshairs
+    // Plot agents as open circles with crosshairs (pen-plotter friendly)
     for (const node of nodes) {
       const { cx, cy } = toCanvas(node);
       const r = 1 + node.influence * 2.5;
+      // Open circle stroke
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = OXIDE;
-      ctx.globalAlpha = 0.4 + node.influence * 0.5;
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.strokeStyle = OXIDE;
+      ctx.lineWidth = 0.5 + node.influence * 0.8;
+      ctx.stroke();
+      // Center dot
+      if (r > 1.5) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = OXIDE;
+        ctx.fill();
+      }
+      // Survey crosshair for high influence
+      if (node.influence > 0.5) {
+        ctx.strokeStyle = OXIDE;
+        ctx.lineWidth = 0.3;
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 1.5, cy); ctx.lineTo(cx + r * 1.5, cy);
+        ctx.moveTo(cx, cy - r * 1.5); ctx.lineTo(cx, cy + r * 1.5);
+        ctx.stroke();
+      }
     }
 
     // Label top influencers
@@ -616,41 +672,34 @@ const Artifacts = (() => {
 
   function renderConstellation(nodes) {
     const { ctx, w, h } = getCanvasCtx();
+    drawRegistration(ctx, w, h);
+    drawPlateTitle(ctx, w,
+      "Constellations of Clan",
+      `${nodes.length} individuals : horizontal = political axis : vertical = influence`,
+      "III"
+    );
 
-    // Deep paper background for star chart
-    ctx.fillStyle = "#1a1a28";
-    ctx.fillRect(0, 0, w, h);
-
-    // Star field
-    for (let i = 0; i < 600; i++) {
-      const x = Math.random() * w;
-      const y = Math.random() * h;
-      const r = Math.random() * 0.6;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(200,200,220,${Math.random() * 0.2 + 0.03})`;
-      ctx.fill();
-    }
-
-    // Title in light ink
-    ctx.fillStyle = "#c0b8a8";
-    ctx.font = "italic 16px Georgia, 'Times New Roman', serif";
-    ctx.textAlign = "center";
-    ctx.fillText("Constellations of Clan", w / 2, 32);
-    ctx.font = "10px Georgia, serif";
-    ctx.fillStyle = "#807868";
-    ctx.fillText(`${nodes.length} stars : horizontal = political axis : vertical = influence`, w / 2, 48);
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#807868";
-    ctx.font = "italic 9px Georgia, serif";
-    ctx.fillText("Plate III", 24, 32);
-    ctx.textAlign = "right";
-    ctx.fillText("CivGraph", w - 24, 32);
-    ctx.textAlign = "left";
-
-    const margin = { top: 62, right: 40, bottom: 50, left: 40 };
+    const margin = { top: 66, right: 50, bottom: 55, left: 50 };
     const iw = w - margin.left - margin.right;
     const ih = h - margin.top - margin.bottom;
+
+    // ── Ruled grid (engraving style) ────────────────────────────
+    ctx.strokeStyle = INK_FAINT;
+    ctx.lineWidth = 0.12;
+    const gridStepX = iw / 7;
+    for (let i = 0; i <= 7; i++) {
+      const x = margin.left + i * gridStepX;
+      ctx.beginPath(); ctx.moveTo(x, margin.top); ctx.lineTo(x, margin.top + ih); ctx.stroke();
+    }
+    // Vertical rulings (influence bands)
+    for (let i = 0; i <= 10; i++) {
+      const y = margin.top + (i / 10) * ih;
+      ctx.beginPath(); ctx.moveTo(margin.left, y); ctx.lineTo(margin.left + iw, y); ctx.stroke();
+    }
+    // Heavier axis rules
+    ctx.lineWidth = 0.4;
+    ctx.beginPath(); ctx.moveTo(margin.left, margin.top + ih); ctx.lineTo(margin.left + iw, margin.top + ih); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(margin.left, margin.top); ctx.lineTo(margin.left, margin.top + ih); ctx.stroke();
 
     const clans = {};
     for (const n of nodes) {
@@ -672,7 +721,7 @@ const Artifacts = (() => {
     for (const clan of clanNames) {
       const members = clans[clan];
       const ci = clanNames.indexOf(clan);
-      const color = CLAN_INKS[ci % CLAN_INKS.length];
+      const ink = CLAN_INKS[ci % CLAN_INKS.length];
       const positions = members.map((n, i) => ({ ...starPos(n, i), node: n }));
 
       // MST constellation lines
@@ -693,10 +742,10 @@ const Artifacts = (() => {
         else break;
       }
 
-      // Draw lines with warm tint
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.2;
-      ctx.lineWidth = 0.6;
+      // Draw MST lines (fine ink)
+      ctx.strokeStyle = ink;
+      ctx.globalAlpha = 0.25;
+      ctx.lineWidth = 0.5;
       for (const [a, b] of mstEdges) {
         ctx.beginPath();
         ctx.moveTo(positions[a].x, positions[a].y);
@@ -705,61 +754,88 @@ const Artifacts = (() => {
       }
       ctx.globalAlpha = 1;
 
-      // Stars
+      // Stars as pen-plotter marks
       for (const pos of positions) {
         const inf = pos.node.influence;
-        const r = 0.8 + inf * 4;
+        const r = 1.0 + inf * 4;
 
-        // Soft glow
-        const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, r * 3);
-        grad.addColorStop(0, color + "80");
-        grad.addColorStop(1, "transparent");
-        ctx.fillStyle = grad;
-        ctx.fillRect(pos.x - r * 3, pos.y - r * 3, r * 6, r * 6);
+        // Stipple halo (pen-plotter friendly, replaces gradient glow)
+        if (inf > 0.15) {
+          stipple(ctx, pos.x, pos.y, r * 2.5, inf * 0.5, ink + "40");
+        }
 
+        // Open circle (pen can draw this)
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = color;
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 0.8 + inf;
+        ctx.stroke();
+        // Filled center dot
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, Math.max(0.5, r * 0.35), 0, Math.PI * 2);
+        ctx.fillStyle = ink;
         ctx.fill();
 
-        // Cross flare for high influence
-        if (inf > 0.5) {
-          ctx.strokeStyle = color;
-          ctx.globalAlpha = 0.3;
-          ctx.lineWidth = 0.4;
-          const fl = r * 2.5;
+        // Cross-hair flare for high influence (pen-plotter native)
+        if (inf > 0.35) {
+          ctx.strokeStyle = ink;
+          ctx.lineWidth = 0.3;
+          const fl = r * 2.2;
           ctx.beginPath();
           ctx.moveTo(pos.x - fl, pos.y); ctx.lineTo(pos.x + fl, pos.y);
           ctx.moveTo(pos.x, pos.y - fl); ctx.lineTo(pos.x, pos.y + fl);
           ctx.stroke();
-          ctx.globalAlpha = 1;
+          // Diagonal cross for very high influence
+          if (inf > 0.6) {
+            const df = fl * 0.6;
+            ctx.beginPath();
+            ctx.moveTo(pos.x - df, pos.y - df); ctx.lineTo(pos.x + df, pos.y + df);
+            ctx.moveTo(pos.x + df, pos.y - df); ctx.lineTo(pos.x - df, pos.y + df);
+            ctx.stroke();
+          }
         }
       }
 
-      // Clan label
+      // Clan label (italic serif)
       const avg_x = positions.reduce((s, p) => s + p.x, 0) / positions.length;
       const avg_y = positions.reduce((s, p) => s + p.y, 0) / positions.length;
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = ink;
+      ctx.globalAlpha = 0.55;
       ctx.font = "italic 7px Georgia, serif";
       ctx.textAlign = "center";
-      ctx.fillText(clan, avg_x, avg_y - 10);
+      ctx.fillText(clan, avg_x, avg_y - 12);
       ctx.globalAlpha = 1;
       ctx.textAlign = "left";
     }
 
-    // Axis labels
-    ctx.fillStyle = "#807868";
-    ctx.font = "8px Georgia, serif";
+    // ── Axis labels (engraved) ──────────────────────────────────
+    ctx.fillStyle = SEPIA;
+    ctx.font = "italic 8px Georgia, serif";
     ctx.textAlign = "center";
     const labels = ["Far Left", "Left", "Centre-Left", "Centre", "Centre-Right", "Right", "Far Right"];
     for (let i = 0; i < 7; i++) {
       ctx.fillText(labels[i], margin.left + ((i + 0.5) / 7) * iw, h - margin.bottom + 16);
     }
+    // Vertical axis label
+    ctx.save();
+    ctx.translate(margin.left - 18, margin.top + ih / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Influence", 0, 0);
+    ctx.restore();
     ctx.textAlign = "left";
 
-    setMeta("Each constellation = one clan. Star brightness = influence. " +
-      "Horizontal = political lean. Lines = minimum spanning tree within clan.");
+    // ── Bottom ruler with tick marks ─────────────────────────────
+    ctx.strokeStyle = INK_FAINT;
+    ctx.lineWidth = 0.3;
+    for (let i = 0; i <= 7; i++) {
+      const x = margin.left + i * gridStepX;
+      ctx.beginPath(); ctx.moveTo(x, margin.top + ih); ctx.lineTo(x, margin.top + ih + 4); ctx.stroke();
+    }
+
+    setMeta("Each constellation = one clan. Circle diameter = influence. " +
+      "Cross-flares mark high-influence individuals. Stipple halo = magnitude. " +
+      "Horizontal = political lean. Lines = minimum spanning tree within clan. " +
+      "Pen-plotter compatible: all marks are strokes.");
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1008,7 +1084,7 @@ const Artifacts = (() => {
     const stripH = ih / domainNames.length;
     const years = history.length;
 
-    const domainInks = [INDIGO, OCHRE, VERDIGRIS, "#5a4080", OXIDE];
+    const domainInks = [INDIGO, OCHRE, VERDIGRIS, "#5a4080", OXIDE, "#3a7d6e", SEPIA];
 
     for (let di = 0; di < domainNames.length; di++) {
       const domain = domainNames[di];
@@ -1063,14 +1139,26 @@ const Artifacts = (() => {
         }
         ctx.stroke();
 
-        // Subtle fill below first trace only
+        // Crosshatch fill below first trace (pen-plotter: diagonal lines instead of solid)
         if (ki === 0) {
-          ctx.globalAlpha = 0.04;
-          ctx.fillStyle = ink;
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(points[0].x, points[0].y);
+          for (let pi = 1; pi < points.length; pi++) ctx.lineTo(points[pi].x, points[pi].y);
           ctx.lineTo(points[points.length - 1].x, baseY + stripH - 2);
           ctx.lineTo(points[0].x, baseY + stripH - 2);
           ctx.closePath();
-          ctx.fill();
+          ctx.clip();
+          ctx.strokeStyle = ink;
+          ctx.lineWidth = 0.2;
+          ctx.globalAlpha = 0.06;
+          for (let hx = margin.left - ih; hx < margin.left + iw + ih; hx += 5) {
+            ctx.beginPath();
+            ctx.moveTo(hx, baseY); ctx.lineTo(hx + ih, baseY + stripH);
+            ctx.stroke();
+          }
+          ctx.restore();
+          ctx.globalAlpha = 1;
         }
 
         // Label last value
@@ -1098,8 +1186,8 @@ const Artifacts = (() => {
     }
     ctx.textAlign = "left";
 
-    setMeta("Five domain strips (economy, housing, migration, culture, governance). " +
-      "Each trace = one indicator within the domain. " +
+    setMeta("Seven domain strips (economy, housing, migration, culture, governance, health, institutions). " +
+      "Each trace = one indicator within the domain. Diagonal hatching under lead trace. " +
       "Advance simulation years to see the city's macro environment evolve.");
   }
 
@@ -1265,12 +1353,36 @@ const Artifacts = (() => {
       else ctx.lineTo(px, py);
     }
     ctx.closePath();
-    ctx.fillStyle = INDIGO;
-    ctx.globalAlpha = 0.12;
-    ctx.fill();
+    // Crosshatch fill instead of solid (pen-plotter compatible)
+    ctx.save();
+    ctx.clip();
+    // Diagonal hatching within the radar polygon
+    const hatchStep = 4;
+    ctx.strokeStyle = INDIGO;
+    ctx.lineWidth = 0.3;
+    ctx.globalAlpha = 0.18;
+    for (let d = -radarR * 2; d < radarR * 2; d += hatchStep) {
+      ctx.beginPath();
+      ctx.moveTo(radarCx + d - radarR, radarCy - radarR);
+      ctx.lineTo(radarCx + d + radarR, radarCy + radarR);
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
+    ctx.restore();
     ctx.strokeStyle = INDIGO;
     ctx.lineWidth = 1.2;
+    // Redraw the polygon outline
+    ctx.beginPath();
+    for (let i = 0; i < nDims; i++) {
+      const angle = (i / nDims) * Math.PI * 2 - Math.PI / 2;
+      const val = composites[dims[i]] || 0;
+      const r = val * radarR;
+      const px = radarCx + Math.cos(angle) * r;
+      const py = radarCy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.stroke();
 
     // Data points on radar
@@ -1340,10 +1452,13 @@ const Artifacts = (() => {
       ctx.strokeRect(px, py, panelW, panelH);
       ctx.globalAlpha = 1;
 
-      // Light fill
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.04;
-      ctx.fillRect(px, py, panelW, panelH);
+      // Light ruled fill (pen-plotter: horizontal rules instead of solid fill)
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 0.15;
+      ctx.globalAlpha = 0.08;
+      for (let ry = py + 2; ry < py + panelH; ry += 3) {
+        ctx.beginPath(); ctx.moveTo(px, ry); ctx.lineTo(px + panelW, ry); ctx.stroke();
+      }
       ctx.globalAlpha = 1;
 
       // Dimension name
