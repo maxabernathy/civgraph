@@ -1,9 +1,10 @@
 """
 CivGraph — Agent-based modeling on a social graph.
 
-Core model: 500 individuals in a mid-scale city, each with clan ties,
-interests, political leanings, Bourdieusian capital, habitus, and
-lifecycle-dependent influence relationships.
+Core model: 1000 individuals in a mid-scale city, each with clan ties,
+interests, political leanings, Bourdieusian capital, habitus, task-based
+economic activities, media consumption, and lifecycle-dependent influence
+relationships.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from capital import (
     capital_to_influence, transmit_economic, transmit_cultural,
     transmit_symbolic, inherit_habitus,
 )
+from economy import AgentEconomy, generate_agent_economy
+from media import MediaConsumption, generate_media_consumption
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -106,6 +109,8 @@ class Agent:
     openness: float
     assertiveness: float
     loyalty: float
+    economy: AgentEconomy | None = None
+    media: MediaConsumption | None = None
     generation: int = 0
     parent_id: str | None = None
     opinion_state: dict[str, float] = field(default_factory=dict)
@@ -145,6 +150,8 @@ class Agent:
             "norms": {k: round(v, 3) for k, v in self.norms.items()},
             "satisfaction": round(self.satisfaction, 3),
             "emergence_score": round(self.emergence_score, 3),
+            "economy": self.economy.to_dict() if self.economy else None,
+            "media": self.media.to_dict() if self.media else None,
         }
 
 
@@ -233,12 +240,26 @@ def generate_city(n: int = 500, seed: int | None = None) -> nx.Graph:
             loyalty = rng.betavariate(3, 2)
 
             first = rng.choice(FIRST_NAMES)
+            occupation = rng.choice(OCCUPATIONS)
+
+            # Economy: task portfolio and tech adaptation
+            economy = generate_agent_economy(
+                occupation, education_track.value, age,
+                origin_class.rank, rng,
+            )
+
+            # Media consumption profile
+            media_cons = generate_media_consumption(
+                age, education_track.value, origin_class.rank,
+                capital.social, rng,
+            )
+
             agent = Agent(
                 id=str(uuid.uuid4())[:12],
                 name=f"{first} {clan}",
                 clan=clan,
                 district=district,
-                occupation=rng.choice(OCCUPATIONS),
+                occupation=occupation,
                 interests=interests,
                 politics=PoliticalLeaning.from_numeric(pol),
                 age=age,
@@ -248,6 +269,8 @@ def generate_city(n: int = 500, seed: int | None = None) -> nx.Graph:
                 openness=openness,
                 assertiveness=assertiveness,
                 loyalty=loyalty,
+                economy=economy,
+                media=media_cons,
             )
             agents.append(agent)
             G.add_node(agent.id, agent=agent)
@@ -469,6 +492,10 @@ def export_for_d3(G: nx.Graph, highlight: set[str] | None = None) -> dict:
             "satisfaction": round(a.satisfaction, 3),
             "emergence_score": round(a.emergence_score, 3),
             "norm_count": len(a.norms),
+            "displacement_risk": round(a.economy.displacement_risk, 3) if a.economy else 0,
+            "income": round(a.economy.income, 3) if a.economy else 0.5,
+            "social_media_exposure": round(a.media.social_exposure, 3) if a.media else 0.5,
+            "algorithmic_bubble": round(a.media.algorithmic_bubble, 3) if a.media else 0,
         })
 
     links = []

@@ -84,6 +84,14 @@ function nodeColor(d) {
         Math.min(1, (d.influence * 0.3 + (d.capital?.social || 0) * 0.3 +
         (d.degree / 30) * 0.2 + (d.capital?.cultural || 0) * 0.2));
       return d3.interpolateMagma(0.15 + emScore * 0.75);
+    case "income":
+      return d3.interpolateGreens(0.15 + (d.income || 0.5) * 0.75);
+    case "displacement":
+      return d3.interpolateReds(0.1 + (d.displacement_risk || 0) * 0.85);
+    case "media":
+      // Social media exposure + algorithmic bubble
+      const mediaScore = Math.min(1, (d.social_media_exposure || 0.5) * 0.6 + (d.algorithmic_bubble || 0) * 0.4);
+      return d3.interpolatePurples(0.15 + mediaScore * 0.75);
     default:
       return "#4a9eff";
   }
@@ -139,6 +147,7 @@ async function init() {
   setupArtifacts();
   connectWebSocket();
   loadEnvironment();
+  loadEconomyMedia();
 
   document.getElementById("loading").classList.add("hidden");
 }
@@ -276,12 +285,18 @@ function showTooltip(event, d) {
   const emLine = d.emergence_score > 0
     ? `<div class="dim">Emergence: ${(d.emergence_score * 100).toFixed(0)}% · Sat: ${(d.satisfaction * 100).toFixed(0)}%${d.norm_count ? ` · ${d.norm_count} norms` : ""}</div>`
     : "";
+  const econLine = d.income !== undefined
+    ? `<div class="dim">Income: ${(d.income * 100).toFixed(0)}% · Disruption: ${((d.displacement_risk || 0) * 100).toFixed(0)}%</div>`
+    : "";
+  const mediaLine = d.social_media_exposure !== undefined
+    ? `<div class="dim">Social media: ${((d.social_media_exposure || 0) * 100).toFixed(0)}%${d.algorithmic_bubble > 0.01 ? ` · Bubble: ${(d.algorithmic_bubble * 100).toFixed(0)}%` : ""}</div>`
+    : "";
   tooltip.innerHTML = `
     <div class="name">${esc(d.name)}</div>
     <div class="dim">${esc(d.occupation.replace(/_/g, " "))} · ${esc(d.district)}</div>
     <div>Clan: ${esc(d.clan)} · ${esc(d.politics.replace(/_/g, " "))}</div>
     <div>Influence: ${(d.influence * 100).toFixed(0)}% · ${d.degree} connections</div>
-    ${emLine}
+    ${econLine}${mediaLine}${emLine}
   `;
   tooltip.classList.add("visible");
 
@@ -361,6 +376,26 @@ async function selectAgent(d) {
         <div class="bar-row"><span class="bar-label">Assertive</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.assertiveness * 100}%"></div></div></div>
         <div class="bar-row"><span class="bar-label">Loyalty</span><div class="bar-track"><div class="bar-fill neutral" style="width:${agent.loyalty * 100}%"></div></div></div>
       </div>
+      ${agent.economy ? `
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">ECONOMY</div>
+        <div class="bar-row"><span class="bar-label">Income</span><div class="bar-track"><div class="bar-fill positive" style="width:${(agent.economy.income||0) * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Disruption</span><div class="bar-track"><div class="bar-fill negative" style="width:${(agent.economy.displacement_risk||0) * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Productivity</span><div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, (agent.economy.productivity||1) / 3 * 100)}%;background:#38bdf8"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Adaptation</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.economy.tech_adaptation||0) * 100}%;background:#a78bfa"></div></div></div>
+        <div style="font-size:0.75em;color:var(--text-dim);margin-top:3px">
+          Tasks: ${agent.economy.tasks ? agent.economy.tasks.map(t => esc(t.name.replace(/_/g," ")) + (t.disruption > 0.1 ? ' <span style="color:var(--negative)">(' + (t.disruption*100).toFixed(0) + '%)</span>' : '')).join(", ") : "—"}
+        </div>
+      </div>` : ""}
+      ${agent.media ? `
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">MEDIA</div>
+        <div class="bar-row"><span class="bar-label">Print</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.media.print_exposure||0) * 100}%;background:#94a3b8"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Mass</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.media.mass_exposure||0) * 100}%;background:#fbbf24"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Social</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.media.social_exposure||0) * 100}%;background:#8b5cf6"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Literacy</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.media.media_literacy||0) * 100}%;background:#5ad49a"></div></div></div>
+        ${agent.media.algorithmic_bubble > 0.01 ? `<div class="bar-row"><span class="bar-label">Bubble</span><div class="bar-track"><div class="bar-fill negative" style="width:${(agent.media.algorithmic_bubble||0) * 100}%"></div></div></div>` : ""}
+      </div>` : ""}
       <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
         Interests: ${agent.interests.map((i) => esc(i.replace(/_/g, " "))).join(", ")}
       </div>
@@ -578,7 +613,7 @@ async function refreshNodeOpinions() {
   // (more efficient: just re-fetch graph which includes opinion data)
   // The graph endpoint doesn't include opinion_state, so we need the agents endpoint
   // For efficiency, fetch a sample to populate _opinions
-  const allAgents = await fetch("/api/search?limit=500").then((r) => r.json());
+  const allAgents = await fetch("/api/search?limit=1000").then((r) => r.json());
   const agentMap = {};
   for (const a of allAgents) agentMap[a.id] = a;
   for (const n of graphData.nodes) {
@@ -879,14 +914,30 @@ async function advanceTick() {
   if (result && result.emergence) {
     renderEmergenceSummary(result.emergence);
   }
+  if (result && result.economy) {
+    // Tick returns economy summary; fetch full for occupation breakdown
+    const fullEcon = await safeFetch("/api/economy");
+    renderEconomyPanel(fullEcon || result.economy);
+  }
+  if (result && result.media) {
+    renderMediaPanel(result.media);
+  }
 
-  // Refresh graph data to reflect capital changes
+  // Refresh graph data to reflect capital/economy/media changes
   graphData = await fetch("/api/graph").then((r) => r.json());
   // Update node visuals without rebuilding simulation
-  nodeGroup.selectAll("circle")
-    .transition().duration(500)
-    .attr("fill", nodeColor)
-    .attr("r", nodeRadius);
+  // Merge positions from current simulation nodes
+  const posMap = {};
+  simulation.nodes().forEach(n => { posMap[n.id] = { x: n.x, y: n.y, vx: n.vx, vy: n.vy, fx: n.fx, fy: n.fy }; });
+  graphData.nodes.forEach(n => {
+    const pos = posMap[n.id];
+    if (pos) { n.x = pos.x; n.y = pos.y; n.vx = pos.vx; n.vy = pos.vy; n.fx = pos.fx; n.fy = pos.fy; }
+  });
+  simulation.nodes(graphData.nodes);
+  simulation.force("link").links(graphData.links);
+  renderLinks();
+  renderNodes();
+  simulation.alpha(0.1).restart();
 }
 
 // ── Emergence summary ───────────────────────────────────────────────────────
@@ -994,6 +1045,127 @@ function renderEmergenceSummary(emergence) {
     }
   }
   container.innerHTML = html;
+}
+
+// ── Economy & Media panels ─────────────────────────────────────────────────
+
+const TECH_COLORS = {
+  mechanization: "#8895a7", digitization: "#60a5fa",
+  ai_ml: "#a78bfa", robotics: "#fbbf24",
+};
+
+const TECH_LABELS = {
+  mechanization: "Mechanization", digitization: "Digitization",
+  ai_ml: "AI / ML", robotics: "Robotics",
+};
+
+function renderEconomyPanel(econData) {
+  const container = document.getElementById("economy-gauges");
+  if (!container || !econData) return;
+
+  let html = "";
+
+  // Tech adoption gauges
+  if (econData.tech_state) {
+    html += `<div class="env-domain-label">tech adoption</div>`;
+    for (const [key, wave] of Object.entries(econData.tech_state)) {
+      const pct = (wave.adoption || 0) * 100;
+      const color = TECH_COLORS[key] || "var(--accent)";
+      const label = TECH_LABELS[key] || wave.name || key;
+      html += `<div class="env-gauge">
+        <span class="env-gauge-label">${esc(label)}</span>
+        <div class="env-gauge-track">
+          <div class="env-gauge-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <span class="env-gauge-val">${pct.toFixed(0)}%</span>
+      </div>`;
+    }
+  }
+
+  // Aggregate stats
+  html += `<div class="env-domain-label">aggregate</div>`;
+  const stats = [
+    { label: "Avg Income", val: econData.avg_income || 0, color: "var(--positive)" },
+    { label: "Avg Disruption", val: econData.avg_displacement_risk || 0, color: "var(--negative)" },
+    { label: "Avg Productivity", val: Math.min(1, (econData.avg_productivity || 1) / 3), color: "#38bdf8" },
+    { label: "Avg Adaptation", val: econData.avg_tech_adaptation || 0, color: "#a78bfa" },
+  ];
+  for (const s of stats) {
+    html += `<div class="env-gauge">
+      <span class="env-gauge-label">${esc(s.label)}</span>
+      <div class="env-gauge-track">
+        <div class="env-gauge-fill" style="width:${s.val * 100}%;background:${s.color}"></div>
+      </div>
+      <span class="env-gauge-val">${(s.val * 100).toFixed(0)}%</span>
+    </div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+const MEDIA_GAUGE_DEFS = [
+  { key: "print_reach", label: "Print Reach", color: "#94a3b8", group: "reach" },
+  { key: "mass_reach", label: "Mass Reach", color: "#fbbf24", group: "reach" },
+  { key: "social_reach", label: "Social Reach", color: "#8b5cf6", group: "reach" },
+  { key: "print_trust", label: "Print Trust", color: "#94a3b8", group: "trust" },
+  { key: "mass_trust", label: "Mass Trust", color: "#fbbf24", group: "trust" },
+  { key: "social_trust", label: "Social Trust", color: "#8b5cf6", group: "trust" },
+  { key: "social_echo_chamber", label: "Echo Chamber", color: "#d46b6b", group: "effects" },
+  { key: "social_polarization", label: "Polarization", color: "#d46b6b", group: "effects" },
+  { key: "misinformation_level", label: "Misinfo", color: "#f87171", group: "effects" },
+  { key: "media_fragmentation", label: "Fragmentation", color: "#d4a85a", group: "effects" },
+];
+
+function renderMediaPanel(mediaData) {
+  const container = document.getElementById("media-gauges");
+  if (!container || !mediaData) return;
+
+  let html = "";
+  const landscape = mediaData.landscape || {};
+
+  let currentGroup = "";
+  for (const def of MEDIA_GAUGE_DEFS) {
+    if (def.group !== currentGroup) {
+      currentGroup = def.group;
+      html += `<div class="env-domain-label">${esc(currentGroup)}</div>`;
+    }
+    const val = landscape[def.key] || 0;
+    html += `<div class="env-gauge">
+      <span class="env-gauge-label">${esc(def.label)}</span>
+      <div class="env-gauge-track">
+        <div class="env-gauge-fill" style="width:${val * 100}%;background:${def.color}"></div>
+      </div>
+      <span class="env-gauge-val">${(val * 100).toFixed(0)}%</span>
+    </div>`;
+  }
+
+  // Aggregate consumption
+  html += `<div class="env-domain-label">population</div>`;
+  const pop = [
+    { label: "Avg Literacy", val: mediaData.avg_media_literacy || 0, color: "#5ad49a" },
+    { label: "Avg Bubble", val: mediaData.avg_algorithmic_bubble || 0, color: "#d46b6b" },
+    { label: "Deep Bubble", val: mediaData.deep_bubble_fraction || 0, color: "#f87171" },
+    { label: "Low Literacy", val: mediaData.low_literacy_fraction || 0, color: "#d4a85a" },
+  ];
+  for (const s of pop) {
+    html += `<div class="env-gauge">
+      <span class="env-gauge-label">${esc(s.label)}</span>
+      <div class="env-gauge-track">
+        <div class="env-gauge-fill" style="width:${s.val * 100}%;background:${s.color}"></div>
+      </div>
+      <span class="env-gauge-val">${(s.val * 100).toFixed(0)}%</span>
+    </div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+// Load initial economy/media data
+async function loadEconomyMedia() {
+  const econData = await safeFetch("/api/economy");
+  if (econData) renderEconomyPanel(econData);
+  const mediaData = await safeFetch("/api/media");
+  if (mediaData) renderMediaPanel(mediaData);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

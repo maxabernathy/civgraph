@@ -18,6 +18,7 @@ import networkx as nx
 
 from model import Agent, PoliticalLeaning, RelType, get_agent
 from capital import capital_field_relevance, habitus_reaction_modifier, habitus_affinity
+from media import media_event_amplifier
 
 
 # ── Event types ──────────────────────────────────────────────────────────────
@@ -274,6 +275,11 @@ def propagate_event(G: nx.Graph, event: Event, max_steps: int = 6,
                 # capital field relevance boosts openness for relevant topics
                 field_match = capital_field_relevance(agent.capital, event.topic)
                 effective_delta *= (agent.openness + field_match * 0.15)
+
+                # Media amplification: agents exposed to media receive amplified events
+                if agent.media and hasattr(G, '_media_landscape') and G._media_landscape:
+                    amp = media_event_amplifier(G._media_landscape, agent.media, event.intensity)
+                    effective_delta *= amp
 
                 # loyalty: if event targets their clan negatively, resist
                 if event.target_clan == agent.clan and event.sentiment < 0:
