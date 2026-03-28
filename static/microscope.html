@@ -421,7 +421,7 @@ function renderStream() {
         window.opener.postMessage({
           type: "microscope_highlight",
           agentIds: [sourceId, targetId].filter(Boolean),
-        }, "*");
+        }, window.location.origin);
       }
     });
   });

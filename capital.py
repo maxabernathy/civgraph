@@ -403,9 +403,13 @@ def habitus_reaction_modifier(habitus: Habitus, topic: str, sentiment: float) ->
 
 # ── Capital conversion ───────────────────────────────────────────────────────
 
+_VALID_CAPITAL_TYPES = {"economic", "cultural", "social", "symbolic"}
+
 def convert_capital(capital: Capital, source: str, target: str, amount: float) -> Capital:
     """Convert capital from one type to another with friction.
     Returns a new Capital with the conversion applied."""
+    if source not in _VALID_CAPITAL_TYPES or target not in _VALID_CAPITAL_TYPES:
+        raise ValueError(f"Invalid capital type: source={source}, target={target}")
     rates = EU_CONFIG["conversion_rates"]
     efficiency = rates.get(source, {}).get(target, 0.2)
 

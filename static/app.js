@@ -609,8 +609,9 @@ function setupEvents() {
       "width=1200,height=700,menubar=no,toolbar=no,location=no,status=no");
   });
 
-  // Listen for microscope highlight requests
+  // Listen for microscope highlight requests (origin-validated)
   window.addEventListener("message", (e) => {
+    if (e.origin !== window.location.origin) return;
     if (e.data && e.data.type === "microscope_highlight" && e.data.agentIds) {
       const ids = new Set(e.data.agentIds);
       nodeGroup.selectAll("g.node").classed("highlighted", (d) => ids.has(d.id));
@@ -1005,7 +1006,7 @@ async function advanceTick() {
 
   // Notify Microscope window of tick completion
   if (microscopeWin && !microscopeWin.closed) {
-    microscopeWin.postMessage({ type: "tick_complete" }, "*");
+    microscopeWin.postMessage({ type: "tick_complete" }, window.location.origin);
   }
 
   // Refresh graph data to reflect capital/economy/media changes
