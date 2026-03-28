@@ -269,42 +269,49 @@ Per-agent emergence attribution (catalyst vs. constrained scores), critical slow
 
 ## Exportable Artifacts
 
-Seven print-quality visualizations rendered to canvas in a scientific engraving aesthetic -- ivory paper, fine ink lines, crosshatching, stipple, serif typography. All exportable as PNG or PDF at up to A2 300dpi. **Designed for pen-plotter output**: all marks are strokes, stipple dots, or hatching -- no gradients, no solid fills, no transparency blending.
+Seven print-quality visualizations rendered to canvas in a 1960s German industrial / Swiss International Style aesthetic -- near-white backgrounds, sans-serif typography (Helvetica Neue / Arial), functional signal colors (Otl Aicher / Dieter Rams), DIN-style plate numbering, visible construction grids. All exportable as PNG or PDF at up to A2 300dpi. **Designed for pen-plotter output**: all marks are strokes, stipple dots, or crosshatching -- no gradients, no solid fills, no transparency blending.
 
-### Anatomies of Agency (Plate I)
+### Anatomies of Agency (01)
 
-Each of the city's 80 most influential agents rendered as a unique radial glyph. Four colored quadrant arcs encode capital. Radiating spokes mark interest domains. Inner arc shows health status (green = good, red = poor; X marks chronic conditions). Ochre ticks mark institutional memberships. Core dot sizes by agency. Political lean rotates the glyph. Stipple density encodes network degree. Ink color = clan.
+Each of the city's 80 most influential agents rendered as a unique radial glyph on a visible construction grid. Four colored quadrant arcs encode capital (green = economic, purple = cultural, blue = social, ochre = symbolic). Inner arc shows health status (green/red; X marks chronic conditions). Ochre ticks mark institutional memberships. Radiating spokes encode interest domains. Core dot sizes by agency (influence x assertiveness). Political lean rotates the glyph. Stipple density = network degree. Ink color = clan.
 
-![Anatomies of Agency -- specimen plate with health arcs and institution marks](docs/08-anatomies.png)
+![Anatomies of Agency -- 80 radial glyphs on construction grid](docs/08-anatomies.png)
 
-### Survey of Influence (Plate II)
+### Interlocking Directorates (02)
 
-Gaussian kernel density estimation rendered as crosshatched elevation bands with marching-squares contour lines. Open circles with survey crosshairs mark agent positions.
+Bipartite network showing shared institutional memberships (Mizruchi 1996). Institutions on the left connected to agents on the right by membership lines. Color-coded by institution type (DB blue = professional boards, green = civic associations, purple = cultural clubs, ochre = social clubs, red = political orgs). Heavier lines = leadership roles. Circle size = membership count / influence. Reveals power concentration through who sits on which boards together.
 
-![Survey of Influence -- cartographic elevation map](docs/09-topography.png)
+![Interlocking Directorates -- bipartite institution-agent network](docs/09-topography.png)
 
-### Constellations of Clan (Plate III)
+### Constellations of Clan (03)
 
-Ivory-paper star chart. Each clan forms a constellation connected by minimum-spanning-tree lines. Horizontal axis = political leaning. Vertical axis = influence. Open circles with stipple halos. Cross-flares mark high-influence agents (8-point stars for the most influential). Ruled survey grid. Fully pen-plotter compatible.
+Scatter chart on a ruled survey grid. Each clan forms a constellation connected by minimum-spanning-tree lines. Horizontal axis = political leaning (far left to far right). Vertical axis = influence. Open circles with concentric target rings for high-influence agents. Cross-flares and 8-point stars mark the most influential. All marks are pen-plotter native strokes.
 
-![Constellations of Clan -- pen-plotter star chart on ivory](docs/10-constellation.png)
+![Constellations of Clan -- political-influence scatter](docs/10-constellation.png)
 
-### Pulse of the City (Plate VI)
+### Fabric of Opinion (04)
 
-Seven domain strips (economy, housing, migration, culture, governance, health, institutions) showing all 26 environment indicators as overlapping ink traces with diagonal crosshatch fill below lead traces.
+Matrix grid: rows = clans, columns = topics. Vertical green hatching = support, horizontal red hatching = opposition, perpendicular grey cross-hatch = internal clan disagreement. Density encodes opinion strength. Requires fired events to populate opinion data.
+
+![Fabric of Opinion -- crosshatch opinion matrix](docs/heatmap.png)
+
+### Seismograph of Events (05)
+
+Strip-chart waveforms showing cascade amplitude per propagation step. Each row = one event. Oscillation frequency increases with cascade depth. Green ink = positive sentiment, red = negative, grey = neutral. DIN-style step markers (S0, S1, S2...). Pure line work.
+
+![Seismograph of Events -- cascade waveforms](docs/seismograph.png)
+
+### Pulse of the City (06)
+
+Seven domain strips (economy, housing, migration, culture, governance, health, institutions) showing all 26 environment indicators as overlapping ink traces. Diagonal crosshatch fill below lead traces. Domain labels in semibold uppercase. Year axis at bottom.
 
 ![Pulse of the City -- 7-domain time-series](docs/11-citypulse.png)
 
-### Observatory of Emergence (Plate VII)
+### Observatory of Emergence (07)
 
-13-dimension radar chart with crosshatch-filled polygon (no solid fills), historical overlays, side panels with ruled-line backgrounds, coupling web, temporal sparklines.
+13-dimension radar chart with crosshatch-filled polygon (no solid fills). Concentric rings at 20% intervals. 7+6 detail panels flanking the radar with dimension-colored bars (crosshatched, not filled), sub-metrics, research citations, trend arrows, and early warning badges (WATCH / WARNING / CRITICAL). Coupling web below the radar shows reinforcing (green) and dampening (red) feedback loops. Temporal sparklines at bottom track all dimensions over simulation years.
 
-![Observatory of Emergence -- pen-plotter radar with hatched fill](docs/13-emergence.png)
-
-### Additional artifacts
-
-- **Fabric of Opinion** (Plate IV) -- woven-textile grid of opinions by clan and topic. Crosshatch only.
-- **Seismograph of Events** (Plate V) -- cascade amplitude waveforms. Pure line work.
+![Observatory of Emergence -- 13-dimension radar with hatched fill](docs/13-emergence.png)
 
 ---
 
