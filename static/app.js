@@ -688,7 +688,7 @@ async function refreshNodeOpinions() {
   // (more efficient: just re-fetch graph which includes opinion data)
   // The graph endpoint doesn't include opinion_state, so we need the agents endpoint
   // For efficiency, fetch a sample to populate _opinions
-  const allAgents = await fetch("/api/search?limit=1000").then((r) => r.json());
+  const allAgents = await fetch("/api/search?limit=5000").then((r) => r.json());
   const agentMap = {};
   for (const a of allAgents) agentMap[a.id] = a;
   for (const n of graphData.nodes) {
@@ -869,7 +869,7 @@ async function openArtifact(type) {
       break;
     case "topography":
       // Fetch full agent data with institutions for the board visualization
-      const agentsFull = await safeFetch("/api/search?limit=1000");
+      const agentsFull = await safeFetch("/api/search?limit=5000");
       Artifacts.renderTopography(agentsFull || nodes);
       break;
     case "constellation":
