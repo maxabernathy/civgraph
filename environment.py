@@ -45,14 +45,28 @@ BASELINES = {
     "corruption_index":     0.18,    # 0-1, 0 = clean
     "policy_stability":     0.70,    # 0-1
     "democratic_quality":   0.78,    # 0-1
+
+    # Health
+    "healthcare_access":    0.65,    # 0-1
+    "life_expectancy_index":0.78,    # 0-1
+    "mental_health_index":  0.60,    # 0-1
+    "health_inequality":    0.35,    # 0-1 (0=equal)
+
+    # Institutions & Education
+    "education_quality":    0.68,    # 0-1
+    "vocational_training_access": 0.55, # 0-1
+    "civic_participation_index":  0.45, # 0-1
+    "associational_density":      0.50, # 0-1
 }
 
 INDICATOR_DOMAINS = {
-    "economy":    ["gdp_growth", "unemployment", "inflation", "business_confidence"],
-    "housing":    ["price_index", "vacancy_rate", "rent_burden", "construction_rate"],
-    "migration":  ["net_migration", "diversity_index", "integration_score"],
-    "culture":    ["cultural_spending", "social_cohesion", "media_pluralism"],
-    "governance": ["public_spending", "corruption_index", "policy_stability", "democratic_quality"],
+    "economy":       ["gdp_growth", "unemployment", "inflation", "business_confidence"],
+    "housing":       ["price_index", "vacancy_rate", "rent_burden", "construction_rate"],
+    "migration":     ["net_migration", "diversity_index", "integration_score"],
+    "culture":       ["cultural_spending", "social_cohesion", "media_pluralism"],
+    "governance":    ["public_spending", "corruption_index", "policy_stability", "democratic_quality"],
+    "health":        ["healthcare_access", "life_expectancy_index", "mental_health_index", "health_inequality"],
+    "institutions":  ["education_quality", "vocational_training_access", "civic_participation_index", "associational_density"],
 }
 
 # Display metadata: (label, min, max, format, higher_is_better)
@@ -75,6 +89,16 @@ INDICATOR_META = {
     "corruption_index":    ("Corruption",           0.0,  1.0,   "norm",  False),
     "policy_stability":    ("Policy Stability",     0.0,  1.0,   "norm",  True),
     "democratic_quality":  ("Democratic Quality",   0.0,  1.0,   "norm",  True),
+    # Health
+    "healthcare_access":   ("Healthcare Access",    0.0,  1.0,   "norm",  True),
+    "life_expectancy_index":("Life Expectancy",     0.0,  1.0,   "norm",  True),
+    "mental_health_index": ("Mental Health",        0.0,  1.0,   "norm",  True),
+    "health_inequality":   ("Health Inequality",    0.0,  1.0,   "norm",  False),
+    # Institutions
+    "education_quality":   ("Education Quality",    0.0,  1.0,   "norm",  True),
+    "vocational_training_access":("Vocational Training",0.0,1.0, "norm",  True),
+    "civic_participation_index":("Civic Participation",0.0,1.0,  "norm",  True),
+    "associational_density":("Assoc. Density",      0.0,  1.0,   "norm",  True),
 }
 
 
@@ -422,6 +446,45 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
                 # Update algorithmic bubble
                 update_algorithmic_bubble(agent.media, agent.opinion_state)
 
+        # ── Health tick: evolve indicators, affect agents ────────────
+        from health import (
+            evolve_health_indicators, evolve_agent_health,
+            health_affect_economy, health_affect_capital, compute_health_stats,
+        )
+        from institutions import (
+            evolve_institution_indicators, evolve_institutional_profile,
+            institutions_affect_capital, institutions_affect_economy,
+            compute_institution_stats,
+        )
+
+        evolve_health_indicators(env.indicators, rng)
+        evolve_institution_indicators(env.indicators, rng)
+
+        health_indicators = {k: env.indicators.get(k, 0) for k in
+                           ("healthcare_access", "life_expectancy_index",
+                            "mental_health_index", "health_inequality")}
+
+        for a in agents:
+            # Health evolution
+            if a.health:
+                disp_risk = a.economy.displacement_risk if a.economy else 0
+                evolve_agent_health(
+                    a.health, a.age, a.habitus.current_class.rank,
+                    a.capital.economic, a.capital.social,
+                    disp_risk, a.satisfaction, health_indicators, rng,
+                )
+                health_affect_capital(a.health, a.capital)
+                health_affect_economy(a.health, a.economy)
+
+            # Institutional evolution
+            if a.institutions:
+                evolve_institutional_profile(
+                    a.institutions, a.age, a.habitus.current_class.rank,
+                    a.habitus.education_track.value, rng,
+                )
+                institutions_affect_capital(a.institutions, a.capital)
+                institutions_affect_economy(a.institutions, a.economy)
+
         # ── Standard environment ↔ agent coupling ─────────────────
         environment_affect_agents(env, G)
         agents_affect_environment(env, G)
@@ -439,10 +502,14 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
         env.record()
         summaries.append(env.snapshot())
 
-    # Collect media stats
+    # Collect stats
     all_media = [G.nodes[n]["agent"].media for n in G.nodes
                  if G.nodes[n]["agent"].media]
     media_stats = compute_media_stats(ml, all_media) if all_media else {}
+    all_health = [a.health for a in agents if a.health]
+    health_stats = compute_health_stats(all_health) if all_health else {}
+    all_inst = [a.institutions for a in agents if a.institutions]
+    inst_stats = compute_institution_stats(all_inst) if all_inst else {}
 
     return {
         "years_advanced": years,
@@ -451,4 +518,6 @@ def advance_environment(env: Environment, G: nx.Graph, years: int = 1,
         "summaries": summaries,
         "economy": econ_summary if years > 0 else {},
         "media": media_stats,
+        "health": health_stats,
+        "institutions": inst_stats,
     }

@@ -92,6 +92,12 @@ function nodeColor(d) {
       // Social media exposure + algorithmic bubble
       const mediaScore = Math.min(1, (d.social_media_exposure || 0.5) * 0.6 + (d.algorithmic_bubble || 0) * 0.4);
       return d3.interpolatePurples(0.15 + mediaScore * 0.75);
+    case "health":
+      return d3.interpolateRdYlGn(d.health_composite || 0.75);
+    case "institutions":
+      // Board power + membership count
+      const instScore = Math.min(1, (d.board_power || 0) * 0.6 + (d.membership_count || 0) / 4 * 0.4);
+      return d3.interpolateOranges(0.15 + instScore * 0.75);
     default:
       return "#4a9eff";
   }
@@ -291,12 +297,15 @@ function showTooltip(event, d) {
   const mediaLine = d.social_media_exposure !== undefined
     ? `<div class="dim">Social media: ${((d.social_media_exposure || 0) * 100).toFixed(0)}%${d.algorithmic_bubble > 0.01 ? ` · Bubble: ${(d.algorithmic_bubble * 100).toFixed(0)}%` : ""}</div>`
     : "";
+  const healthLine = d.health_composite !== undefined
+    ? `<div class="dim">Health: ${((d.health_composite || 0.75) * 100).toFixed(0)}%${d.chronic_condition ? ' · Chronic' : ''}${d.membership_count ? ` · ${d.membership_count} memberships` : ""}</div>`
+    : "";
   tooltip.innerHTML = `
     <div class="name">${esc(d.name)}</div>
     <div class="dim">${esc(d.occupation.replace(/_/g, " "))} · ${esc(d.district)}</div>
     <div>Clan: ${esc(d.clan)} · ${esc(d.politics.replace(/_/g, " "))}</div>
     <div>Influence: ${(d.influence * 100).toFixed(0)}% · ${d.degree} connections</div>
-    ${econLine}${mediaLine}${emLine}
+    ${econLine}${mediaLine}${healthLine}${emLine}
   `;
   tooltip.classList.add("visible");
 
@@ -395,6 +404,33 @@ async function selectAgent(d) {
         <div class="bar-row"><span class="bar-label">Social</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.media.social_exposure||0) * 100}%;background:#8b5cf6"></div></div></div>
         <div class="bar-row"><span class="bar-label">Literacy</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.media.media_literacy||0) * 100}%;background:#5ad49a"></div></div></div>
         ${agent.media.algorithmic_bubble > 0.01 ? `<div class="bar-row"><span class="bar-label">Bubble</span><div class="bar-track"><div class="bar-fill negative" style="width:${(agent.media.algorithmic_bubble||0) * 100}%"></div></div></div>` : ""}
+      </div>` : ""}
+      ${agent.health ? `
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">HEALTH</div>
+        <div class="bar-row"><span class="bar-label">Physical</span><div class="bar-track"><div class="bar-fill positive" style="width:${(agent.health.physical_health||0) * 100}%"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Mental</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.health.mental_health||0) * 100}%;background:#60a5fa"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Work Cap.</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.health.work_capacity||0) * 100}%;background:#fbbf24"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Stress</span><div class="bar-track"><div class="bar-fill negative" style="width:${(agent.health.stress_level||0) * 100}%"></div></div></div>
+        <div style="font-size:0.75em;color:var(--text-dim);margin-top:2px">
+          ${agent.health.chronic_condition ? '<span style="color:var(--negative)">Chronic condition</span> · ' : ''}
+          Literacy: ${((agent.health.health_literacy||0)*100).toFixed(0)}%
+          · Access: ${((agent.health.healthcare_access||0)*100).toFixed(0)}%
+        </div>
+      </div>` : ""}
+      ${agent.institutions && agent.institutions.memberships && agent.institutions.memberships.length > 0 ? `
+      <div class="meta" style="margin-top:6px">
+        <div style="color:var(--text-dim);font-size:0.8em;margin-bottom:3px">INSTITUTIONS (${agent.institutions.membership_count})</div>
+        ${agent.institutions.memberships.map(m => `
+          <div style="font-size:0.75em;margin-bottom:2px">
+            <span style="color:var(--accent)">${esc(m.name)}</span>
+            <span style="color:var(--text-dim)"> · ${esc(m.type.replace(/_/g," "))}${m.leadership ? ' · <span style="color:var(--accent3)">Leader</span>' : ''} · ${m.years_active}y</span>
+            ${m.economic_interest > 0.1 ? `<span style="color:var(--accent2)"> · econ: ${(m.economic_interest*100).toFixed(0)}%</span>` : ""}
+          </div>
+        `).join("")}
+        <div class="bar-row" style="margin-top:3px"><span class="bar-label">Skills</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.institutions.skill_currency||0) * 100}%;background:#38bdf8"></div></div></div>
+        <div class="bar-row"><span class="bar-label">Learning</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.institutions.lifelong_learning||0) * 100}%;background:#a78bfa"></div></div></div>
+        ${agent.institutions.board_power > 0 ? `<div class="bar-row"><span class="bar-label">Board Pwr</span><div class="bar-track"><div class="bar-fill" style="width:${(agent.institutions.board_power||0) * 100}%;background:#fbbf24"></div></div></div>` : ""}
       </div>` : ""}
       <div style="margin-top:6px;font-size:0.85em;color:var(--text-dim)">
         Interests: ${agent.interests.map((i) => esc(i.replace(/_/g, " "))).join(", ")}
@@ -922,6 +958,9 @@ async function advanceTick() {
   if (result && result.media) {
     renderMediaPanel(result.media);
   }
+  if (result) {
+    renderHealthPanel(result.health || null, result.institutions || null);
+  }
 
   // Refresh graph data to reflect capital/economy/media changes
   graphData = await fetch("/api/graph").then((r) => r.json());
@@ -1160,12 +1199,65 @@ function renderMediaPanel(mediaData) {
   container.innerHTML = html;
 }
 
-// Load initial economy/media data
+function renderHealthPanel(healthData, instData) {
+  const container = document.getElementById("health-gauges");
+  if (!container) return;
+
+  let html = "";
+
+  if (healthData) {
+    html += `<div class="env-domain-label">health</div>`;
+    const healthGauges = [
+      { label: "Avg Physical", val: healthData.avg_physical_health || 0, color: "var(--positive)" },
+      { label: "Avg Mental", val: healthData.avg_mental_health || 0, color: "#60a5fa" },
+      { label: "Work Capacity", val: healthData.avg_work_capacity || 0, color: "#fbbf24" },
+      { label: "Avg Stress", val: healthData.avg_stress || 0, color: "var(--negative)" },
+      { label: "Chronic Rate", val: healthData.chronic_condition_rate || 0, color: "#d4a85a" },
+    ];
+    for (const g of healthGauges) {
+      html += `<div class="env-gauge">
+        <span class="env-gauge-label">${esc(g.label)}</span>
+        <div class="env-gauge-track">
+          <div class="env-gauge-fill" style="width:${g.val * 100}%;background:${g.color}"></div>
+        </div>
+        <span class="env-gauge-val">${(g.val * 100).toFixed(0)}%</span>
+      </div>`;
+    }
+  }
+
+  if (instData) {
+    html += `<div class="env-domain-label">institutions</div>`;
+    const instGauges = [
+      { label: "Avg Memberships", val: Math.min(1, (instData.avg_memberships || 0) / 4), color: "#a78bfa", raw: (instData.avg_memberships || 0).toFixed(1) },
+      { label: "Board Members", val: instData.board_member_fraction || 0, color: "#fbbf24" },
+      { label: "Leaders", val: instData.leadership_fraction || 0, color: "#d4a85a" },
+      { label: "Skill Currency", val: instData.avg_skill_currency || 0, color: "#38bdf8" },
+      { label: "Civic Partic.", val: instData.avg_civic_participation || 0, color: "var(--positive)" },
+    ];
+    for (const g of instGauges) {
+      const display = g.raw || (g.val * 100).toFixed(0) + "%";
+      html += `<div class="env-gauge">
+        <span class="env-gauge-label">${esc(g.label)}</span>
+        <div class="env-gauge-track">
+          <div class="env-gauge-fill" style="width:${g.val * 100}%;background:${g.color}"></div>
+        </div>
+        <span class="env-gauge-val">${display}</span>
+      </div>`;
+    }
+  }
+
+  container.innerHTML = html || '<span class="emergence-placeholder">No data yet</span>';
+}
+
+// Load initial economy/media/health/institution data
 async function loadEconomyMedia() {
   const econData = await safeFetch("/api/economy");
   if (econData) renderEconomyPanel(econData);
   const mediaData = await safeFetch("/api/media");
   if (mediaData) renderMediaPanel(mediaData);
+  const healthData = await safeFetch("/api/health");
+  const instData = await safeFetch("/api/institutions");
+  renderHealthPanel(healthData, instData);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

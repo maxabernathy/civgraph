@@ -3,8 +3,9 @@ CivGraph — Agent-based modeling on a social graph.
 
 Core model: 1000 individuals in a mid-scale city, each with clan ties,
 interests, political leanings, Bourdieusian capital, habitus, task-based
-economic activities, media consumption, and lifecycle-dependent influence
-relationships.
+economic activities, media consumption, health status, institutional
+memberships (boards, associations, clubs), and lifecycle-dependent
+influence relationships.
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ from capital import (
 )
 from economy import AgentEconomy, generate_agent_economy
 from media import MediaConsumption, generate_media_consumption
+from health import AgentHealth, generate_agent_health
+from institutions import InstitutionalProfile, generate_institutional_profile, create_institutional_ties
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -111,6 +114,8 @@ class Agent:
     loyalty: float
     economy: AgentEconomy | None = None
     media: MediaConsumption | None = None
+    health: AgentHealth | None = None
+    institutions: InstitutionalProfile | None = None
     generation: int = 0
     parent_id: str | None = None
     opinion_state: dict[str, float] = field(default_factory=dict)
@@ -152,6 +157,8 @@ class Agent:
             "emergence_score": round(self.emergence_score, 3),
             "economy": self.economy.to_dict() if self.economy else None,
             "media": self.media.to_dict() if self.media else None,
+            "health": self.health.to_dict() if self.health else None,
+            "institutions": self.institutions.to_dict() if self.institutions else None,
         }
 
 
@@ -165,6 +172,7 @@ class RelType(str, Enum):
     FRIENDSHIP = "friendship"
     RIVALRY = "rivalry"
     HABITUS = "habitus"
+    INSTITUTIONAL = "institutional"
 
 
 # ── City Generator ───────────────────────────────────────────────────────────
@@ -254,6 +262,19 @@ def generate_city(n: int = 500, seed: int | None = None) -> nx.Graph:
                 capital.social, rng,
             )
 
+            # Health
+            agent_health = generate_agent_health(
+                age, origin_class.rank, education_track.value,
+                capital.economic, capital.social, rng,
+            )
+
+            # Institutional memberships
+            inst_profile = generate_institutional_profile(
+                occupation, education_track.value, origin_class.rank,
+                age, capital.economic, capital.cultural, capital.social,
+                pol, interests, rng,
+            )
+
             agent = Agent(
                 id=str(uuid.uuid4())[:12],
                 name=f"{first} {clan}",
@@ -271,6 +292,8 @@ def generate_city(n: int = 500, seed: int | None = None) -> nx.Graph:
                 loyalty=loyalty,
                 economy=economy,
                 media=media_cons,
+                health=agent_health,
+                institutions=inst_profile,
             )
             agents.append(agent)
             G.add_node(agent.id, agent=agent)
@@ -412,6 +435,9 @@ def generate_city(n: int = 500, seed: int | None = None) -> nx.Graph:
                 w = 0.3 + best_aff * 0.4
                 G.add_edge(a.id, best_b.id, weight=round(w, 3), rel=RelType.HABITUS.value)
 
+    # 9) Institutional ties — shared board/club membership creates bonds
+    inst_edges = create_institutional_ties(G, agents, rng)
+
     # ── Recompute social capital from actual graph degree ────────────────
     for n_id in G.nodes:
         agent = G.nodes[n_id]["agent"]
@@ -496,6 +522,12 @@ def export_for_d3(G: nx.Graph, highlight: set[str] | None = None) -> dict:
             "income": round(a.economy.income, 3) if a.economy else 0.5,
             "social_media_exposure": round(a.media.social_exposure, 3) if a.media else 0.5,
             "algorithmic_bubble": round(a.media.algorithmic_bubble, 3) if a.media else 0,
+            "health_composite": round(a.health.composite, 3) if a.health else 0.75,
+            "work_capacity": round(a.health.work_capacity, 3) if a.health else 1.0,
+            "chronic_condition": a.health.chronic_condition if a.health else False,
+            "membership_count": len(a.institutions.memberships) if a.institutions else 0,
+            "board_power": round(a.institutions.board_power, 3) if a.institutions else 0,
+            "skill_currency": round(a.institutions.skill_currency, 3) if a.institutions else 0.7,
         })
 
     links = []
