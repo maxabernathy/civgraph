@@ -7,3 +7,4 @@ dist/
 *.spec.bak
 saves/*.json.gz
 exports/
+.claude/

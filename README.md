@@ -6,10 +6,25 @@ An agent-based model of urban social dynamics, built on Pierre Bourdieu's theory
 
 ## Quick Start
 
+**Python:**
 ```bash
 pip install -r requirements.txt
 python run.py
 # http://localhost:8420
+```
+
+**Docker:**
+```bash
+docker build -t civgraph .
+docker run -p 8420:8420 civgraph
+# http://localhost:8420
+```
+
+**Standalone binary** (no Python required):
+```
+# Windows: download civgraph.exe from Releases
+civgraph.exe
+# Opens browser automatically
 ```
 
 ---

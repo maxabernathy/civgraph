@@ -50,7 +50,7 @@ import random as _random
 
 import networkx as nx
 
-app = FastAPI(title="CivGraph", version="0.3.0")
+app = FastAPI(title="CivGraph", version="0.1.0")
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
