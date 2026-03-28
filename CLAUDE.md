@@ -8,6 +8,7 @@ After any changes to Python model files, `static/` frontend files, or artifacts,
 2. Run `python screenshot.py` (or `python screenshot.py --port 8421` if port is busy)
    - Captures all views: main graph, 9 color modes, agent detail, events, ticks, 5 artifacts, microscope
    - Use `--no-tick` to skip event/tick steps (just capture current state)
+   - Use `--artifacts-only` to only recapture the 7 artifact plates (faster)
 3. Verify key screenshots visually (Read the PNG files)
 4. Stop server
 5. Update `README.md` to reflect all current systems, screenshots, and API endpoints
