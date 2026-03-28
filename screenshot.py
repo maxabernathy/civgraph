@@ -37,6 +37,8 @@ COLOR_MODES = [
 ARTIFACTS = [
     ("anatomies", "08-anatomies"),
     ("topography", "09-topography"),
+    ("heatmap", "heatmap"),
+    ("seismograph", "seismograph"),
     ("constellation", "10-constellation"),
     ("citypulse", "11-citypulse"),
     ("emergence", "13-emergence"),

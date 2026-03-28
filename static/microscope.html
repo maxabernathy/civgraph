@@ -245,7 +245,7 @@
       height: 100%;
       color: var(--text-dim);
       font-size: 12px;
-      font-style: italic;
+      font-weight: 300;
     }
 
     /* ── Scrollbar ──────────────────────────── */
@@ -429,11 +429,13 @@ function renderStream() {
 
 // ── Export as artifact ────────────────────────────────────────────────
 function exportArtifact() {
-  const IVORY = "#f5f0e8";
-  const INK = "#1a1a2e";
-  const INK_LIGHT = "#3d3d5c";
-  const INK_FAINT = "#8888a0";
-  const SEPIA = "#6b5b4f";
+  const PAPER = "#fafafa";
+  const INK = "#1a1a1a";
+  const INK_LIGHT = "#4a4a4a";
+  const INK_FAINT = "#b0b0b0";
+  const GRID = "#e0e0e0";
+  const SEPIA = "#6a6a6a";
+  const FONT = '-apple-system, "Helvetica Neue", Arial, sans-serif';
 
   const canvas = document.createElement("canvas");
   const scale = 2;
@@ -444,50 +446,44 @@ function exportArtifact() {
   const ctx = canvas.getContext("2d");
   ctx.scale(scale, scale);
 
-  // Ivory background
-  ctx.fillStyle = IVORY;
+  // Clean white background (no texture)
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, w, h);
 
-  // Paper grain
-  ctx.globalAlpha = 0.02;
-  for (let i = 0; i < w * h * 0.002; i++) {
-    ctx.fillStyle = Math.random() > 0.5 ? "#a09880" : "#d0c8b8";
-    ctx.fillRect(Math.random() * w, Math.random() * h, Math.random() * 1.5, Math.random() * 1.5);
-  }
-  ctx.globalAlpha = 1;
+  // Registration: single border + crop marks
+  ctx.strokeStyle = INK_FAINT;
+  ctx.lineWidth = 0.3;
+  ctx.strokeRect(12, 12, w - 24, h - 24);
+  const m = 12, gap = 2, len = 8;
+  [[m,m,1,1],[w-m,m,-1,1],[m,h-m,1,-1],[w-m,h-m,-1,-1]].forEach(([x,y,dx,dy]) => {
+    ctx.beginPath();
+    ctx.moveTo(x - dx*(len+gap), y); ctx.lineTo(x - dx*gap, y);
+    ctx.moveTo(x, y - dy*(len+gap)); ctx.lineTo(x, y - dy*gap);
+    ctx.stroke();
+  });
 
-  // Registration marks
+  // Title: left-aligned, semibold, uppercase
+  ctx.fillStyle = INK;
+  ctx.font = `600 15px ${FONT}`;
+  ctx.textAlign = "left";
+  ctx.fillText("LEDGER OF TRANSACTIONS", 20, 34);
+  ctx.font = `300 9px ${FONT}`;
+  ctx.fillStyle = INK_LIGHT;
+  ctx.fillText(`${allTransactions.length} atomic interactions recorded during simulation tick`, 20, 46);
+
+  // Plate number: large, light, right-aligned
+  ctx.font = `600 22px ${FONT}`;
+  ctx.fillStyle = INK_FAINT;
+  ctx.textAlign = "right";
+  ctx.fillText("08", w - 20, 36);
+  ctx.font = `500 7px ${FONT}`;
+  ctx.fillText("CIVGRAPH", w - 20, 46);
+  ctx.font = `300 7px ${FONT}`;
+  ctx.fillText(new Date().toISOString().slice(0, 10), w - 20, 54);
+
+  // Single rule
   ctx.strokeStyle = INK_FAINT;
   ctx.lineWidth = 0.4;
-  ctx.strokeRect(8, 8, w - 16, h - 16);
-  ctx.lineWidth = 0.15;
-  ctx.strokeRect(12, 12, w - 24, h - 24);
-
-  // Title
-  ctx.fillStyle = INK;
-  ctx.font = "italic 18px Georgia, serif";
-  ctx.textAlign = "center";
-  ctx.fillText("Ledger of Transactions", w / 2, 34);
-  ctx.font = "11px Georgia, serif";
-  ctx.fillStyle = SEPIA;
-  const summary = `${allTransactions.length} atomic interactions recorded during simulation tick`;
-  ctx.fillText(summary, w / 2, 50);
-
-  // Plate number
-  ctx.font = "italic 9px Georgia, serif";
-  ctx.fillStyle = INK_FAINT;
-  ctx.textAlign = "left";
-  ctx.fillText("Plate VIII", 20, 34);
-  ctx.textAlign = "right";
-  ctx.fillText("CivGraph", w - 20, 28);
-  ctx.font = "8px Georgia, serif";
-  ctx.fillText(new Date().toISOString().slice(0, 10), w - 20, 40);
-
-  // Rule
-  ctx.strokeStyle = INK_FAINT;
-  ctx.lineWidth = 0.25;
-  ctx.beginPath(); ctx.moveTo(20, 56); ctx.lineTo(w - 20, 56); ctx.stroke();
-  ctx.lineWidth = 0.12;
   ctx.beginPath(); ctx.moveTo(20, 58); ctx.lineTo(w - 20, 58); ctx.stroke();
 
   // Summary section
@@ -500,18 +496,17 @@ function exportArtifact() {
   ctx.textAlign = "left";
   let sx = 30;
   const sy = 72;
-  ctx.font = "bold 8px Georgia, serif";
+  ctx.font = `600 8px ${FONT}`;
   ctx.fillStyle = INK;
   ctx.fillText("SUMMARY", sx, sy);
-  ctx.font = "7px Georgia, serif";
+  ctx.font = `300 7px ${FONT}`;
   let si = 0;
   for (const [type, count] of sortedTypes) {
     const info = txTypes[type] || {};
-    const color = info.color || "#5a6575";
+    const color = info.color || "#707070";
     const label = info.label || type;
     const x = sx + (si % 5) * 130;
     const y = sy + 14 + Math.floor(si / 5) * 12;
-    // Dot
     ctx.beginPath();
     ctx.arc(x + 3, y - 2, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = color;
@@ -523,8 +518,8 @@ function exportArtifact() {
 
   // Rule
   const ledgerTop = sy + 14 + Math.ceil(sortedTypes.length / 5) * 12 + 10;
-  ctx.strokeStyle = INK_FAINT;
-  ctx.lineWidth = 0.2;
+  ctx.strokeStyle = GRID;
+  ctx.lineWidth = 0.3;
   ctx.beginPath(); ctx.moveTo(20, ledgerTop); ctx.lineTo(w - 20, ledgerTop); ctx.stroke();
 
   // Transaction rows
@@ -532,17 +527,17 @@ function exportArtifact() {
   const maxRows = Math.floor((h - ledgerTop - 60) / rowH);
   const txs = allTransactions.slice(0, maxRows);
 
-  ctx.font = "6.5px Georgia, serif";
+  ctx.font = `300 6.5px ${FONT}`;
   for (let i = 0; i < txs.length; i++) {
     const tx = txs[i];
     const y = ledgerTop + 12 + i * rowH;
     const info = txTypes[tx.type] || {};
-    const color = info.color || "#5a6575";
+    const color = info.color || "#707070";
 
     // Index
     ctx.fillStyle = INK_FAINT;
     ctx.textAlign = "right";
-    ctx.fillText(String(i + 1), 38, y);
+    ctx.fillText(String(i + 1).padStart(3, " "), 38, y);
 
     // Type dot
     ctx.beginPath();
@@ -553,31 +548,33 @@ function exportArtifact() {
     // Type label
     ctx.fillStyle = color;
     ctx.textAlign = "left";
-    ctx.font = "bold 6px Georgia, serif";
+    ctx.font = `600 6px ${FONT}`;
     ctx.fillText((info.label || tx.type).toUpperCase(), 50, y);
 
     // Source -> Target
-    ctx.font = "6.5px Georgia, serif";
+    ctx.font = `400 6.5px ${FONT}`;
     ctx.fillStyle = INK;
     const srcTgt = `${tx.source} \u2192 ${tx.target}`;
     ctx.fillText(srcTgt.substring(0, 40), 140, y);
 
     // Context
     ctx.fillStyle = INK_LIGHT;
+    ctx.font = `300 6.5px ${FONT}`;
     ctx.fillText(tx.context.substring(0, 55), 380, y);
 
     // Magnitude
     ctx.textAlign = "right";
     const mag = tx.magnitude;
-    ctx.fillStyle = mag > 0.001 ? "#3a7d6e" : mag < -0.001 ? "#8b3a3a" : INK_FAINT;
+    ctx.fillStyle = mag > 0.001 ? "#008844" : mag < -0.001 ? "#cc0000" : INK_FAINT;
+    ctx.font = `400 6.5px ${FONT}`;
     ctx.fillText(mag > 0 ? `+${mag.toFixed(3)}` : mag.toFixed(3), w - 24, y);
     ctx.textAlign = "left";
 
-    // Faint rule between rows
+    // Faint rule every 5 rows
     if (i % 5 === 4) {
-      ctx.strokeStyle = INK_FAINT;
+      ctx.strokeStyle = GRID;
       ctx.lineWidth = 0.08;
-      ctx.globalAlpha = 0.3;
+      ctx.globalAlpha = 0.5;
       ctx.beginPath(); ctx.moveTo(30, y + 3); ctx.lineTo(w - 30, y + 3); ctx.stroke();
       ctx.globalAlpha = 1;
     }
@@ -588,16 +585,16 @@ function exportArtifact() {
   ctx.strokeStyle = INK_FAINT;
   ctx.lineWidth = 0.3;
   ctx.beginPath(); ctx.moveTo(24, ly - 6); ctx.lineTo(w - 24, ly - 6); ctx.stroke();
-  ctx.fillStyle = SEPIA;
-  ctx.font = "italic 8px Georgia, serif";
-  ctx.fillText("Each row records a single atomic interaction between agents, actants, and institutions.", 30, ly + 4);
-  ctx.font = "7px Georgia, serif";
   ctx.fillStyle = INK_LIGHT;
-  ctx.fillText("Green magnitude = beneficial. Red = detrimental. Sources include non-human actants (Latour): technologies, media platforms, and institutional structures.", 30, ly + 14);
+  ctx.font = `600 7px ${FONT}`;
+  ctx.fillText("READING THE LEDGER", 30, ly + 4);
+  ctx.font = `300 7px ${FONT}`;
+  ctx.fillStyle = SEPIA;
+  ctx.fillText("Each row records a single atomic interaction. Green = beneficial, red = detrimental. Sources include non-human actants (Latour).", 30, ly + 14);
 
   // Download
   const link = document.createElement("a");
-  link.download = `civgraph-microscope-${Date.now()}.png`;
+  link.download = `civgraph-ledger-${Date.now()}.png`;
   link.href = canvas.toDataURL("image/png");
   link.click();
 }
