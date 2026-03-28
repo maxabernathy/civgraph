@@ -315,6 +315,29 @@ Seven domain strips (economy, housing, migration, culture, governance, health, i
 
 ---
 
+## Persistence and Portability
+
+CivGraph saves and exports full simulation state for resumption, sharing, and external analysis.
+
+### Save / Load
+
+Save the complete simulation to a gzip-compressed JSON file (`.civgraph.json.gz`, typically 0.8 MB). Every agent's capital, habitus, economy, media, health, institutions, opinions, and norms are preserved at full precision. Load reconstructs the entire simulation state in ~50ms — including all 26 environment indicators, emergence history, media landscape, technology adoption levels, and event log. Auto-save can be configured to save every N ticks (keeps last 3 autosaves).
+
+### Export for External Tools
+
+| Format | Size | Use with |
+|---|---|---|
+| **CSV ZIP** | ~560 KB | R, pandas, Excel, SPSS, Stata — 6 flat tables: `agents.csv` (~50 columns), `edges.csv`, `environment_history.csv`, `emergence_history.csv`, `events.csv`, `memberships.csv` |
+| **GEXF** | ~3.1 MB | **Gephi** (native format) — all agent attributes as node properties for filtering, coloring, sizing |
+| **GraphML** | ~1.6 MB | **Gephi**, **yEd**, **Cytoscape**, **Neo4j**, **igraph** — universal graph exchange |
+| **JSON** | ~0.8 MB | Any programming language, **D3.js**, **Observable**, **Jupyter** |
+
+### Starting Fresh
+
+`POST /api/reset?seed=N` generates a new city from scratch with a different random seed. Previous saves are preserved — you can explore multiple seeds and load back to any saved state.
+
+---
+
 ## Architecture
 
 ```
@@ -348,9 +371,14 @@ model.py         -- Agent dataclass, city generator (1,000 agents,
                     9 edge types), D3 export.
 events.py        -- Capital-aware BFS propagation, media amplification,
                     coalition detection.
-server.py        -- FastAPI REST + WebSocket, 35+ endpoints.
+transactions.py  -- Atomic transaction ledger for Microscope view.
+persistence.py   -- Save/load (gzip JSON), CSV/GEXF/GraphML export,
+                    auto-save, Gephi-compatible graph export.
+server.py        -- FastAPI REST + WebSocket, 45+ endpoints.
 static/          -- D3.js frontend (15 color modes, 7 pen-plotter
-                    artifacts, 6-panel dashboard, A2 print export).
+                    artifacts, Microscope, 6-panel dashboard).
+screenshot.py    -- Playwright screenshot tool (--artifacts-only,
+                    --port, --no-tick).
 ```
 
 ## API
@@ -376,4 +404,13 @@ static/          -- D3.js frontend (15 color modes, 7 pen-plotter
 | `GET /api/sts` | Full STS snapshot: actants, OPPs, performativity, black-boxing, alignment |
 | `GET /api/sts/passage-points` | Top 20 obligatory passage points (Callon) |
 | `GET /api/sts/network-capital` | Network programmers and switchers (Castells) |
+| `GET /api/transactions` | Atomic transaction ledger from last tick |
+| `POST /api/save` | Save simulation state to disk (.civgraph.json.gz) |
+| `GET /api/saves` | List available save files with metadata |
+| `POST /api/load` | Load simulation from save file |
+| `DELETE /api/saves/{f}` | Delete a save file |
+| `GET /api/export/csv` | Download CSV ZIP (agents, edges, history, memberships) |
+| `GET /api/export/gexf` | Download GEXF (Gephi native format) |
+| `GET /api/export/graphml` | Download GraphML (universal graph exchange) |
+| `GET/POST /api/autosave` | Configure auto-save (enabled, interval) |
 | `WS /ws` | WebSocket for live propagation animation |
