@@ -45,8 +45,48 @@ ARTIFACTS = [
 ]
 
 
+async def _fire_rich_events(url: str):
+    """Fire diverse events via API to populate all artifact panels."""
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        # Get agent IDs spread across the graph
+        async with session.get(f"{url}/api/graph") as r:
+            graph = await r.json()
+        nodes = graph["nodes"]
+        ids = [nodes[i]["id"] for i in [0, 50, 150, 300, 500, 700, min(900, len(nodes)-1)]]
+
+        events = [
+            {"origin_agent": ids[0], "event_type": "tech_boom", "title": "AI Revolution Hits City", "topic": "tech", "sentiment": 0.7, "intensity": 0.8},
+            {"origin_agent": ids[1], "event_type": "housing_crisis", "title": "Rent Crisis Deepens", "topic": "real_estate", "sentiment": -0.6, "intensity": 0.7},
+            {"origin_agent": ids[2], "event_type": "protest", "title": "Climate March", "topic": "environment", "sentiment": 0.5, "intensity": 0.6, "political_bias": -2},
+            {"origin_agent": ids[3], "event_type": "scandal", "title": "Board Corruption Exposed", "topic": "governance", "sentiment": -0.8, "intensity": 0.9},
+            {"origin_agent": ids[4], "event_type": "election", "title": "City Election 2026", "topic": "governance", "sentiment": 0.3, "intensity": 0.7, "political_bias": 1},
+            {"origin_agent": ids[5], "event_type": "cultural_event", "title": "New Arts Quarter Opens", "topic": "arts", "sentiment": 0.6, "intensity": 0.5},
+            {"origin_agent": ids[6], "event_type": "crisis", "title": "Economic Downturn", "topic": "finance", "sentiment": -0.5, "intensity": 0.6},
+        ]
+        for evt in events:
+            async with session.post(f"{url}/api/event", json=evt) as r:
+                await r.json()
+
+        # Advance 25 years
+        for _ in range(5):
+            async with session.post(f"{url}/api/tick", json={"years": 5}) as r:
+                d = await r.json()
+        print(f"  Events fired: {len(events)}, advanced to year {d.get('current_year', '?')}")
+
+
 async def capture_all(port: int = 8420, do_tick: bool = True):
     url = f"http://127.0.0.1:{port}"
+
+    # Pre-populate rich event data via API before opening browser
+    if do_tick:
+        try:
+            print("Firing rich events via API...")
+            await _fire_rich_events(url)
+        except ImportError:
+            print("  (aiohttp not available, will fire events via UI)")
+        except Exception as e:
+            print(f"  (API events failed: {e}, will fire via UI)")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
@@ -54,8 +94,8 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
 
         print(f"Loading {url}...")
         await page.goto(url, wait_until="networkidle")
-        await page.wait_for_selector("#graph-svg", timeout=30000)
-        await asyncio.sleep(8)
+        await page.wait_for_selector("#graph-svg", timeout=60000)
+        await asyncio.sleep(10)
 
         # ── Initial state ──────────────────────────────────────────
         print("01 - Main graph...")
@@ -70,10 +110,10 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
             await page.screenshot(path=f"{DOCS}/03-agent-detail.png")
 
         if do_tick:
-            # ── Fire event ─────────────────────────────────────────
-            await page.fill("#event-title", "AI Revolution Hits City")
-            await page.select_option("#event-type", "tech_boom")
-            await page.select_option("#event-topic", "tech")
+            # ── Fire one more event via UI for propagation screenshot ─
+            await page.fill("#event-title", "Education Reform")
+            await page.select_option("#event-type", "education_reform")
+            await page.select_option("#event-topic", "education")
             await page.click("#btn-fire-event")
             await asyncio.sleep(6)
             print("04 - Event propagation...")
@@ -88,11 +128,11 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
             await asyncio.sleep(3)
             await page.screenshot(path=f"{DOCS}/06-bridge-agents.png")
 
-            # ── Advance 5 years ────────────────────────────────────
+            # ── Advance 5 more years ──────────────────────────────
             print("07 - Environment tick (5y)...")
             await page.select_option("#tick-years", "5")
             await page.click("#btn-tick")
-            await asyncio.sleep(6)
+            await asyncio.sleep(8)
             await page.click('button[data-mode="capital"]')
             await asyncio.sleep(1)
             await page.screenshot(path=f"{DOCS}/07-environment-tick.png")
@@ -150,28 +190,21 @@ async def capture_artifacts_only(port: int = 8420):
     """Capture only artifact screenshots (faster, assumes server is running)."""
     url = f"http://127.0.0.1:{port}"
 
+    # Fire rich events via API first
+    try:
+        print("Firing rich events via API...")
+        await _fire_rich_events(url)
+    except Exception as e:
+        print(f"  (API events failed: {e}, artifacts may look sparse)")
+
     async with async_playwright() as p:
         browser = await p.chromium.launch()
         page = await browser.new_page(viewport=VP_MAIN)
 
         print(f"Loading {url}...")
         await page.goto(url, wait_until="networkidle")
-        await page.wait_for_selector("#graph-svg", timeout=30000)
-        await asyncio.sleep(6)
-
-        # Fire event + tick to populate data
-        circles = await page.query_selector_all(".node circle")
-        if len(circles) > 5:
-            await circles[5].click()
-            await asyncio.sleep(1)
-        await page.fill("#event-title", "AI Revolution")
-        await page.select_option("#event-type", "tech_boom")
-        await page.select_option("#event-topic", "tech")
-        await page.click("#btn-fire-event")
-        await asyncio.sleep(5)
-        await page.select_option("#tick-years", "5")
-        await page.click("#btn-tick")
-        await asyncio.sleep(6)
+        await page.wait_for_selector("#graph-svg", timeout=60000)
+        await asyncio.sleep(8)
 
         for artifact, filename in ARTIFACTS:
             print(f"{filename}...")
