@@ -390,17 +390,17 @@ header .stats span {
   grid-column: 1 / -1;
   background: var(--surface);
   display: grid;
-  grid-template-columns: 1.1fr 1fr 0.8fr 0.8fr 0.7fr;
+  grid-template-columns: 1.1fr 1fr 0.8fr 0.8fr 0.8fr 0.6fr;
   gap: 1px;
   overflow: hidden;
 }
 
-#env-panel, #event-panel, #economy-panel, #media-panel, #log-panel {
+#env-panel, #event-panel, #economy-panel, #media-panel, #health-panel, #log-panel {
   padding: clamp(8px, 0.8vw, 16px);
   overflow-y: auto;
 }
 
-#env-panel h2, #event-panel h2, #economy-panel h2, #media-panel h2, #log-panel h2 {
+#env-panel h2, #event-panel h2, #economy-panel h2, #media-panel h2, #health-panel h2, #log-panel h2 {
   font-size: clamp(9px, 0.65vw, 12px);
   text-transform: uppercase;
   letter-spacing: 1.5px;

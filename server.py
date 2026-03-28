@@ -34,6 +34,11 @@ from economy import get_tech_state, TECH_WAVES, OCCUPATION_TASKS
 from media import (
     MediaLandscape, create_media_landscape, compute_media_stats,
 )
+from health import compute_health_stats
+from institutions import (
+    compute_institution_stats, InstitutionType, INSTITUTION_PROFILES,
+    INSTITUTION_NAMES,
+)
 import random as _random
 
 import networkx as nx
@@ -215,6 +220,7 @@ async def get_meta():
         "occupations": list(OCCUPATION_TASKS.keys()),
         "tech_waves": list(TECH_WAVES.keys()),
         "media_types": ["print", "mass", "social"],
+        "institution_types": [t.value for t in InstitutionType],
     }
 
 
@@ -503,6 +509,105 @@ async def get_agent_media(agent_id: str):
     if agent.media:
         return agent.media.to_dict()
     return {}
+
+
+# ── Health endpoints ──────────────────────────────────────────────────────
+
+@app.get("/api/health")
+async def get_health():
+    """Aggregate health statistics."""
+    G = ensure_graph()
+    agents = [G.nodes[n]["agent"] for n in G.nodes]
+    all_health = [a.health for a in agents if a.health]
+    stats = compute_health_stats(all_health) if all_health else {}
+
+    # Add by-class breakdown
+    by_class: dict[str, dict] = {}
+    for a in agents:
+        if not a.health:
+            continue
+        cls = a.habitus.current_class.value
+        if cls not in by_class:
+            by_class[cls] = {"physical": [], "mental": [], "chronic": 0, "count": 0}
+        by_class[cls]["physical"].append(a.health.physical_health)
+        by_class[cls]["mental"].append(a.health.mental_health)
+        if a.health.chronic_condition:
+            by_class[cls]["chronic"] += 1
+        by_class[cls]["count"] += 1
+    class_summary = {
+        cls: {
+            "avg_physical": round(sum(d["physical"]) / d["count"], 3),
+            "avg_mental": round(sum(d["mental"]) / d["count"], 3),
+            "chronic_rate": round(d["chronic"] / d["count"], 3),
+            "count": d["count"],
+        }
+        for cls, d in by_class.items()
+    }
+    stats["by_class"] = class_summary
+    return stats
+
+
+@app.get("/api/health/agent/{agent_id}")
+async def get_agent_health(agent_id: str):
+    G = ensure_graph()
+    _validate_agent_id(G, agent_id)
+    agent = get_agent(G, agent_id)
+    if agent.health:
+        return agent.health.to_dict()
+    return {}
+
+
+# ── Institution endpoints ─────────────────────────────────────────────────
+
+@app.get("/api/institutions")
+async def get_institutions():
+    """Aggregate institutional statistics."""
+    G = ensure_graph()
+    agents = [G.nodes[n]["agent"] for n in G.nodes]
+    all_inst = [a.institutions for a in agents if a.institutions]
+    stats = compute_institution_stats(all_inst) if all_inst else {}
+
+    # Interlocking directorates: which institutions share the most members
+    inst_members: dict[str, list[str]] = {}
+    for a in agents:
+        if not a.institutions:
+            continue
+        for m in a.institutions.memberships:
+            inst_members.setdefault(m.institution_name, []).append(a.name)
+    top_institutions = sorted(
+        [{"name": k, "members": len(v)} for k, v in inst_members.items()],
+        key=lambda x: x["members"], reverse=True,
+    )[:15]
+    stats["top_institutions"] = top_institutions
+
+    return stats
+
+
+@app.get("/api/institutions/agent/{agent_id}")
+async def get_agent_institutions(agent_id: str):
+    G = ensure_graph()
+    _validate_agent_id(G, agent_id)
+    agent = get_agent(G, agent_id)
+    if agent.institutions:
+        return agent.institutions.to_dict()
+    return {}
+
+
+@app.get("/api/institutions/types")
+async def get_institution_types():
+    """Return institution type profiles."""
+    return {
+        t.value: {
+            "name": p.name,
+            "prestige": p.prestige,
+            "economic_benefit": p.economic_benefit,
+            "social_benefit": p.social_benefit,
+            "time_commitment": p.time_commitment,
+            "cultural_benefit": p.cultural_benefit,
+            "institutions": INSTITUTION_NAMES.get(t, []),
+        }
+        for t, p in INSTITUTION_PROFILES.items()
+    }
 
 
 # ── WebSocket for live propagation ──────────────────────────────────────────
