@@ -240,7 +240,7 @@ def compute_translation(
 # 3. OBLIGATORY PASSAGE POINTS (Callon 1986)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def compute_passage_points(G: nx.Graph, top_n: int = 20) -> list[dict]:
+def compute_passage_points(G: nx.Graph, top_n: int = 20, bc_cache: dict | None = None) -> list[dict]:
     """Identify obligatory passage points in the network.
 
     An OPP (Callon 1986) is a node that other actors must pass through
@@ -254,7 +254,7 @@ def compute_passage_points(G: nx.Graph, top_n: int = 20) -> list[dict]:
         return []
 
     # Betweenness centrality (Burt's structural holes foundation)
-    bc = nx.betweenness_centrality(G, weight="weight", k=min(200, G.number_of_nodes()))
+    bc = bc_cache or nx.betweenness_centrality(G, weight="weight", k=min(200, G.number_of_nodes()))
 
     opp_scores = []
     for nid in G.nodes:
@@ -631,7 +631,7 @@ def compute_heterogeneous_alignment(G: nx.Graph) -> dict:
 # 8. NETWORK PROGRAMMERS & SWITCHERS (Castells 2009)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def compute_network_capital(G: nx.Graph, top_n: int = 15) -> dict:
+def compute_network_capital(G: nx.Graph, top_n: int = 15, bc_cache: dict | None = None) -> dict:
     """Identify network programmers and switchers.
 
     Castells (2009): power in network society operates through two
@@ -649,7 +649,7 @@ def compute_network_capital(G: nx.Graph, top_n: int = 15) -> dict:
     """
     agents_data = []
 
-    bc = nx.betweenness_centrality(G, weight="weight", k=min(200, G.number_of_nodes()))
+    bc = bc_cache or nx.betweenness_centrality(G, weight="weight", k=min(200, G.number_of_nodes()))
 
     for nid in G.nodes:
         agent = G.nodes[nid]["agent"]
@@ -716,14 +716,18 @@ def compute_sts_snapshot(G: nx.Graph, tech_waves: dict | None = None,
     """Compute full STS analytics snapshot.
 
     Returns all STS-derived metrics in a single dict for the API.
+    Betweenness centrality is computed once and shared across functions.
     """
+    # Compute betweenness once (most expensive operation) and share
+    _shared_bc = nx.betweenness_centrality(G, weight="weight", k=min(200, G.number_of_nodes()))
+
     actants = compute_nonhuman_actants(tech_waves or {}, media_landscape, {})
-    opps = compute_passage_points(G)
+    opps = compute_passage_points(G, bc_cache=_shared_bc)
     performativity = compute_performativity(G)
     black_boxing = compute_black_boxing(G, tech_waves)
     centers = compute_centers_of_calculation(G)
     alignment = compute_heterogeneous_alignment(G)
-    network_capital = compute_network_capital(G)
+    network_capital = compute_network_capital(G, bc_cache=_shared_bc)
 
     return {
         "actants": [

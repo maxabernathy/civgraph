@@ -645,8 +645,8 @@ async def get_network_capital():
 
 @app.get("/api/transactions")
 async def get_transactions(
-    limit: int = 500,
-    offset: int = 0,
+    limit: int = Query(default=500, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0, le=50000),
     type: Optional[str] = None,
 ):
     """Get recorded atomic transactions from the last tick."""

@@ -1748,6 +1748,9 @@ class EmergenceTracker:
             agent_scores=agent_scores,
         )
         self.history.append(snap)
+        # Cap history to prevent unbounded memory growth
+        if len(self.history) > 50:
+            self.history = self.history[-50:]
         return snap
 
     def get_history(self) -> list[dict]:

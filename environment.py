@@ -117,6 +117,8 @@ class Environment:
 
     def record(self):
         self.history.append(self.snapshot())
+        if len(self.history) > 200:
+            self.history = self.history[-200:]
 
     def to_dict(self) -> dict:
         return {

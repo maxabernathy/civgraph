@@ -609,8 +609,9 @@ function setupEvents() {
       "width=1200,height=700,menubar=no,toolbar=no,location=no,status=no");
   });
 
-  // Listen for microscope highlight requests
+  // Listen for microscope highlight requests (origin-validated)
   window.addEventListener("message", (e) => {
+    if (e.origin !== window.location.origin) return;
     if (e.data && e.data.type === "microscope_highlight" && e.data.agentIds) {
       const ids = new Set(e.data.agentIds);
       nodeGroup.selectAll("g.node").classed("highlighted", (d) => ids.has(d.id));
@@ -842,7 +843,7 @@ async function openArtifact(type) {
 
   const titles = {
     anatomies: "ANATOMIES OF AGENCY",
-    topography: "SURVEY OF INFLUENCE",
+    topography: "INTERLOCKING DIRECTORATES",
     constellation: "CONSTELLATIONS OF CLAN",
     heatmap: "FABRIC OF OPINION",
     seismograph: "SEISMOGRAPH OF EVENTS",
@@ -867,7 +868,9 @@ async function openArtifact(type) {
       Artifacts.renderAnatomies(nodes);
       break;
     case "topography":
-      Artifacts.renderTopography(nodes);
+      // Fetch full agent data with institutions for the board visualization
+      const agentsFull = await safeFetch("/api/search?limit=1000");
+      Artifacts.renderTopography(agentsFull || nodes);
       break;
     case "constellation":
       Artifacts.renderConstellation(nodes);
@@ -1003,7 +1006,7 @@ async function advanceTick() {
 
   // Notify Microscope window of tick completion
   if (microscopeWin && !microscopeWin.closed) {
-    microscopeWin.postMessage({ type: "tick_complete" }, "*");
+    microscopeWin.postMessage({ type: "tick_complete" }, window.location.origin);
   }
 
   // Refresh graph data to reflect capital/economy/media changes

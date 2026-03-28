@@ -2,3 +2,6 @@ __pycache__/
 capture_screenshots.py
 capture_artifacts.py
 capture_all.py
+build/
+dist/
+*.spec.bak

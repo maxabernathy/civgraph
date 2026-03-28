@@ -391,7 +391,7 @@ def opinion_summary(G: nx.Graph, topic: str) -> dict:
 
 def find_bridges(G: nx.Graph) -> list[dict]:
     """Find bridge agents who connect otherwise disconnected communities."""
-    bc = nx.betweenness_centrality(G, weight="weight")
+    bc = nx.betweenness_centrality(G, weight="weight", k=min(200, G.number_of_nodes()))
     top = sorted(bc.items(), key=lambda x: x[1], reverse=True)[:20]
     return [
         {
