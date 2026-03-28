@@ -190,6 +190,21 @@ Each agent has a media consumption profile (print/mass/social exposure, media li
 
 ---
 
+## Microscope: Atomic Transaction Stream
+
+The Microscope opens in a separate window and reveals every individual interaction during a simulation tick — the atomic transactions that are normally invisible inside the black box of a year's evolution.
+
+![Microscope -- scrolling transaction stream showing 1,000+ atomic interactions](docs/22-microscope.png)
+
+Each row records a single interaction: media effects shifting an agent's opinion on a topic, social media deepening an algorithmic bubble, a technology actant displacing a task, a chronic condition onset, an institution accumulating capital for a board member. Sources include non-human actants (Latour): AI/ML, social media, mass media, institutional structures.
+
+- **Color-coded type chips** in the summary bar (click to filter)
+- **Search** by agent name or keyword
+- **Click any row** to highlight the agents in the main graph window
+- **Export** as "Ledger of Transactions" (Plate VIII) in the engraving aesthetic
+
+---
+
 ## Events and Influence Propagation
 
 Events ripple through the social graph via a BFS cascade with decay. Reaction strength depends on capital field relevance, political alignment, habitus disposition, social capital threshold, clan loyalty, and media amplification.
