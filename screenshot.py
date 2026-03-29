@@ -2,19 +2,23 @@
 CivGraph -- Screenshot capture tool.
 
 Captures all key views of the application using Playwright for
-README documentation. Run after any significant code changes.
+README documentation.  Every artifact is fully populated: events
+are fired through the UI (populating the browser's eventHistory),
+ticks are advanced via the step button, and data accumulates in
+staggered waves so all panels have rich content.
 
 Usage:
-    python screenshot.py              # default port 8420
-    python screenshot.py --port 8421  # custom port
-    python screenshot.py --no-tick    # skip event/tick (just capture current state)
+    python screenshot.py                    # default port 8420
+    python screenshot.py --port 8421        # custom port
+    python screenshot.py --no-tick          # skip event/tick steps
+    python screenshot.py --artifacts-only   # only capture artifact plates
 
 Requires: pip install playwright && playwright install chromium
 """
 
 import asyncio
 import argparse
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Page
 
 DOCS = "docs"
 VP_MAIN = {"width": 1920, "height": 1080}
@@ -44,49 +48,129 @@ ARTIFACTS = [
     ("emergence", "13-emergence"),
 ]
 
+# ── Event waves: diverse events to fire at different simulation stages ───────
+# Each wave is fired after a tick phase.  We spread event types, topics,
+# sentiments, intensities, and political biases so every artifact panel
+# has rich, varied data to render.
 
-async def _fire_rich_events(url: str):
-    """Fire diverse events via API to populate all artifact panels."""
-    import aiohttp
-    async with aiohttp.ClientSession() as session:
-        # Get agent IDs spread across the graph
-        async with session.get(f"{url}/api/graph") as r:
-            graph = await r.json()
-        nodes = graph["nodes"]
-        ids = [nodes[i]["id"] for i in [0, 50, 150, 300, 500, 700, min(900, len(nodes)-1)]]
+EVENT_WAVES = [
+    # Wave 1 — early shocks (fired at ~year 5)
+    [
+        {"type": "tech_boom",       "topic": "tech",        "title": "AI Revolution Hits City",        "sentiment": 0.7,  "intensity": 0.8, "bias": 0.5},
+        {"type": "housing_crisis",  "topic": "real_estate",  "title": "Rent Crisis Deepens",            "sentiment": -0.6, "intensity": 0.7, "bias": -1.0},
+        {"type": "protest",         "topic": "environment",  "title": "Climate March Fills Streets",     "sentiment": 0.4,  "intensity": 0.6, "bias": -2.0},
+    ],
+    # Wave 2 — political upheaval (fired at ~year 15)
+    [
+        {"type": "scandal",         "topic": "governance",   "title": "Board Corruption Exposed",       "sentiment": -0.8, "intensity": 0.9, "bias": 0.0},
+        {"type": "election",        "topic": "governance",   "title": "City Election 2032",             "sentiment": 0.3,  "intensity": 0.7, "bias": 1.0},
+        {"type": "policy_change",   "topic": "law",          "title": "New Zoning Laws Passed",         "sentiment": -0.3, "intensity": 0.6, "bias": -0.5},
+        {"type": "welfare_reform",  "topic": "finance",      "title": "Safety Net Overhaul",            "sentiment": -0.4, "intensity": 0.7, "bias": -1.5},
+    ],
+    # Wave 3 — cultural & economic (fired at ~year 25)
+    [
+        {"type": "cultural_event",  "topic": "arts",         "title": "New Arts Quarter Opens",         "sentiment": 0.6,  "intensity": 0.5, "bias": 0.0},
+        {"type": "festival",        "topic": "hospitality",  "title": "International Food Festival",    "sentiment": 0.8,  "intensity": 0.4, "bias": 0.0},
+        {"type": "crisis",          "topic": "finance",      "title": "Economic Downturn Bites",        "sentiment": -0.5, "intensity": 0.6, "bias": 0.5},
+    ],
+    # Wave 4 — late-game disruption (fired at ~year 35)
+    [
+        {"type": "education_reform","topic": "education",    "title": "University Reform Act",          "sentiment": 0.5,  "intensity": 0.6, "bias": -1.0},
+        {"type": "development",     "topic": "real_estate",  "title": "Waterfront Mega-Project",        "sentiment": 0.2,  "intensity": 0.8, "bias": 1.5},
+        {"type": "tech_boom",       "topic": "manufacturing","title": "Robotics Factory Announced",     "sentiment": 0.6,  "intensity": 0.7, "bias": 0.0},
+    ],
+]
 
-        events = [
-            {"origin_agent": ids[0], "event_type": "tech_boom", "title": "AI Revolution Hits City", "topic": "tech", "sentiment": 0.7, "intensity": 0.8},
-            {"origin_agent": ids[1], "event_type": "housing_crisis", "title": "Rent Crisis Deepens", "topic": "real_estate", "sentiment": -0.6, "intensity": 0.7},
-            {"origin_agent": ids[2], "event_type": "protest", "title": "Climate March", "topic": "environment", "sentiment": 0.5, "intensity": 0.6, "political_bias": -2},
-            {"origin_agent": ids[3], "event_type": "scandal", "title": "Board Corruption Exposed", "topic": "governance", "sentiment": -0.8, "intensity": 0.9},
-            {"origin_agent": ids[4], "event_type": "election", "title": "City Election 2026", "topic": "governance", "sentiment": 0.3, "intensity": 0.7, "political_bias": 1},
-            {"origin_agent": ids[5], "event_type": "cultural_event", "title": "New Arts Quarter Opens", "topic": "arts", "sentiment": 0.6, "intensity": 0.5},
-            {"origin_agent": ids[6], "event_type": "crisis", "title": "Economic Downturn", "topic": "finance", "sentiment": -0.5, "intensity": 0.6},
-        ]
-        for evt in events:
-            async with session.post(f"{url}/api/event", json=evt) as r:
-                await r.json()
+# Tick schedule: years to advance before each event wave and at the end.
+# len(TICK_SCHEDULE) == len(EVENT_WAVES) + 1
+TICK_PHASES = [5, 10, 10, 10, 5]   # total 40 years
 
-        # Advance 25 years
-        for _ in range(5):
-            async with session.post(f"{url}/api/tick", json={"years": 5}) as r:
-                d = await r.json()
-        print(f"  Events fired: {len(events)}, advanced to year {d.get('current_year', '?')}")
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+async def _set_slider(page: Page, selector: str, value: float):
+    """Set an <input type=range> value and dispatch its input event."""
+    await page.evaluate(f"""(() => {{
+        const el = document.querySelector('{selector}');
+        if (!el) return;
+        el.value = {value};
+        el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    }})()""")
+
+
+async def _advance_ticks(page: Page, years: int, step_size: int = 5):
+    """Advance simulation via the UI step button, step_size years at a time."""
+    remaining = years
+    while remaining > 0:
+        chunk = min(step_size, remaining)
+        await page.select_option("#tick-years", str(chunk))
+        await page.click("#btn-step")
+        await asyncio.sleep(6)  # wait for tick + render
+        remaining -= chunk
+    print(f"    ticked {years}y")
+
+
+async def _fire_events_ui(page: Page, events: list[dict]):
+    """Fire a batch of events through the UI form.
+
+    Selects different nodes as origins to spread events across the graph.
+    Each event populates the browser's eventHistory (needed for seismograph)
+    and triggers opinion updates (needed for heatmap).
+    """
+    circles = await page.query_selector_all(".node circle")
+    n_circles = len(circles)
+    if n_circles == 0:
+        print("    WARNING: no circles found, skipping events")
+        return
+
+    for i, evt in enumerate(events):
+        # Pick a spread-out node as origin; force=True bypasses bottom-panel overlap
+        idx = int((i + 1) * n_circles / (len(events) + 1)) % n_circles
+        await circles[idx].click(force=True)
+        await asyncio.sleep(0.5)
+
+        # Fill the event form
+        await page.select_option("#event-type", evt["type"])
+        # Topic select may not have all values; try/except
+        try:
+            await page.select_option("#event-topic", evt["topic"])
+        except Exception:
+            pass  # keep whatever topic is selected
+        await page.fill("#event-title", evt["title"])
+        await _set_slider(page, "#event-sentiment", evt.get("sentiment", 0.5))
+        await _set_slider(page, "#event-intensity", evt.get("intensity", 0.7))
+        await _set_slider(page, "#event-bias", evt.get("bias", 0.0))
+        await page.click("#btn-fire-event")
+        await asyncio.sleep(4)  # wait for propagation animation
+        print(f"    fired: {evt['title']}")
+
+
+async def _warmup_simulation(page: Page):
+    """Run the full warmup: interleaved ticks and event waves.
+
+    After warmup every artifact has rich data:
+      - Seismograph: 13 events in eventHistory
+      - Heatmap: opinions shaped by events
+      - City Pulse: 40 years of environment history
+      - Emergence: 40 years of emergence snapshots
+      - Anatomies/Topography/Constellation: evolved agents
+    """
+    for phase_idx in range(len(EVENT_WAVES)):
+        tick_years = TICK_PHASES[phase_idx]
+        print(f"  Phase {phase_idx + 1}: tick {tick_years}y, then fire events...")
+        await _advance_ticks(page, tick_years)
+        await _fire_events_ui(page, EVENT_WAVES[phase_idx])
+
+    # Final tick phase (no events after)
+    final_years = TICK_PHASES[-1]
+    print(f"  Final phase: tick {final_years}y...")
+    await _advance_ticks(page, final_years)
+
+
+# ── Capture routines ─────────────────────────────────────────────────────────
 
 async def capture_all(port: int = 8420, do_tick: bool = True):
     url = f"http://127.0.0.1:{port}"
-
-    # Pre-populate rich event data via API before opening browser
-    if do_tick:
-        try:
-            print("Firing rich events via API...")
-            await _fire_rich_events(url)
-        except ImportError:
-            print("  (aiohttp not available, will fire events via UI)")
-        except Exception as e:
-            print(f"  (API events failed: {e}, will fire via UI)")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
@@ -95,25 +179,39 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
         print(f"Loading {url}...")
         await page.goto(url, wait_until="networkidle")
         await page.wait_for_selector("#graph-svg", timeout=60000)
-        await asyncio.sleep(10)
+        await asyncio.sleep(8)
+
+        # ── Simulation warmup ──────────────────────────────────────
+        if do_tick:
+            print("Warming up simulation...")
+            await _warmup_simulation(page)
+            await asyncio.sleep(2)
 
         # ── Initial state ──────────────────────────────────────────
+        await page.click('button[data-mode="clan"]')
+        await asyncio.sleep(1)
         print("01 - Main graph...")
         await page.screenshot(path=f"{DOCS}/01-main-graph.png")
 
         # ── Agent detail ───────────────────────────────────────────
         circles = await page.query_selector_all(".node circle")
         if len(circles) > 5:
-            await circles[5].click()
+            await circles[5].click(force=True)
             await asyncio.sleep(2)
             print("03 - Agent detail...")
             await page.screenshot(path=f"{DOCS}/03-agent-detail.png")
 
         if do_tick:
             # ── Fire one more event via UI for propagation screenshot ─
-            await page.fill("#event-title", "Education Reform")
+            if len(circles) > 20:
+                await circles[20].click(force=True)
+                await asyncio.sleep(0.5)
+            await page.fill("#event-title", "Education Reform Protest")
             await page.select_option("#event-type", "education_reform")
-            await page.select_option("#event-topic", "education")
+            try:
+                await page.select_option("#event-topic", "education")
+            except Exception:
+                pass
             await page.click("#btn-fire-event")
             await asyncio.sleep(6)
             print("04 - Event propagation...")
@@ -130,9 +228,7 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
 
             # ── Advance 5 more years ──────────────────────────────
             print("07 - Environment tick (5y)...")
-            await page.select_option("#tick-years", "5")
-            await page.click("#btn-tick")
-            await asyncio.sleep(8)
+            await _advance_ticks(page, 5)
             await page.click('button[data-mode="capital"]')
             await asyncio.sleep(1)
             await page.screenshot(path=f"{DOCS}/07-environment-tick.png")
@@ -147,8 +243,9 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
         # ── Agent detail after ticks ───────────────────────────────
         await page.click('button[data-mode="clan"]')
         await asyncio.sleep(0.5)
+        circles = await page.query_selector_all(".node circle")
         if len(circles) > 10:
-            await circles[10].click()
+            await circles[10].click(force=True)
             await asyncio.sleep(2)
             print("14 - Agent detail post-ticks...")
             await page.screenshot(path=f"{DOCS}/14-agent-emergence-detail.png")
@@ -156,9 +253,7 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
         if do_tick:
             # ── 10 more years ──────────────────────────────────────
             print("18 - After 10 more years...")
-            await page.select_option("#tick-years", "10")
-            await page.click("#btn-tick")
-            await asyncio.sleep(8)
+            await _advance_ticks(page, 10)
             await page.click('button[data-mode="displacement"]')
             await asyncio.sleep(1)
             await page.screenshot(path=f"{DOCS}/18-disruption-10yr.png")
@@ -167,7 +262,7 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
         for artifact, filename in ARTIFACTS:
             print(f"{filename}...")
             await page.click(f'[data-artifact="{artifact}"]')
-            await asyncio.sleep(3)
+            await asyncio.sleep(4)
             await page.screenshot(path=f"{DOCS}/{filename}.png")
             await page.click("#btn-close-artifact")
             await asyncio.sleep(0.5)
@@ -187,15 +282,8 @@ async def capture_all(port: int = 8420, do_tick: bool = True):
 
 
 async def capture_artifacts_only(port: int = 8420):
-    """Capture only artifact screenshots (faster, assumes server is running)."""
+    """Capture only artifact screenshots with full data warmup."""
     url = f"http://127.0.0.1:{port}"
-
-    # Fire rich events via API first
-    try:
-        print("Firing rich events via API...")
-        await _fire_rich_events(url)
-    except Exception as e:
-        print(f"  (API events failed: {e}, artifacts may look sparse)")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
@@ -206,10 +294,14 @@ async def capture_artifacts_only(port: int = 8420):
         await page.wait_for_selector("#graph-svg", timeout=60000)
         await asyncio.sleep(8)
 
+        print("Warming up simulation for artifacts...")
+        await _warmup_simulation(page)
+        await asyncio.sleep(2)
+
         for artifact, filename in ARTIFACTS:
             print(f"{filename}...")
             await page.click(f'[data-artifact="{artifact}"]')
-            await asyncio.sleep(3)
+            await asyncio.sleep(4)
             await page.screenshot(path=f"{DOCS}/{filename}.png")
             await page.click("#btn-close-artifact")
             await asyncio.sleep(0.5)
@@ -222,7 +314,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Capture CivGraph screenshots")
     parser.add_argument("--port", type=int, default=8420, help="Server port")
     parser.add_argument("--no-tick", action="store_true", help="Skip event/tick steps")
-    parser.add_argument("--artifacts-only", action="store_true", help="Only capture artifact plates")
+    parser.add_argument("--artifacts-only", action="store_true",
+                        help="Only capture artifact plates (with warmup)")
     args = parser.parse_args()
     if args.artifacts_only:
         asyncio.run(capture_artifacts_only(port=args.port))
