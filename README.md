@@ -284,13 +284,13 @@ Per-agent emergence attribution (catalyst vs. constrained scores), critical slow
 
 ## Exportable Artifacts
 
-Seven print-quality visualizations rendered to canvas in a 1960s German industrial / Swiss International Style aesthetic -- near-white backgrounds, sans-serif typography (Helvetica Neue / Arial), functional signal colors (Otl Aicher / Dieter Rams), DIN-style plate numbering, visible construction grids. All exportable as PNG or PDF at up to A2 300dpi. **Designed for pen-plotter output**: all marks are strokes, stipple dots, or crosshatching -- no gradients, no solid fills, no transparency blending.
+Seven print-quality visualizations rendered to canvas in a 1960s German industrial / Swiss International Style aesthetic -- near-white backgrounds, sans-serif typography (Helvetica Neue / Arial), functional signal colors (Otl Aicher / Dieter Rams), DIN-style plate numbering, visible construction grids. All exportable as PNG or PDF at up to A2 300dpi. **Designed for pen-plotter output**: all marks are strokes, stipple dots, or crosshatching -- no gradients, no solid fills, no transparency blending. The screenshot tool fires 13 events across all types and advances 55 years in staggered phases so every artifact renders with fully populated data.
 
-### Anatomies of Agency (01)
+### Rhizome Anatomies (01)
 
-Each of the city's 80 most influential agents rendered as a unique radial glyph on a visible construction grid. Four colored quadrant arcs encode capital (green = economic, purple = cultural, blue = social, ochre = symbolic). Inner arc shows health status (green/red; X marks chronic conditions). Ochre ticks mark institutional memberships. Radiating spokes encode interest domains. Core dot sizes by agency (influence x assertiveness). Political lean rotates the glyph. Stipple density = network degree. Ink color = clan.
+Each of the city's 48 most influential agents rendered as a rhizome glyph (Deleuze & Guattari 1980, *A Thousand Plateaus*) on a visible construction grid. A root node represents the agent (size = influence x assertiveness), from which four primary tendrils grow outward encoding capital: green = economic, purple = cultural, blue = social, ochre = symbolic. Branch forks show interests diverging from each capital domain. Red thorns mark chronic conditions. Dotted runners indicate institutional ties. Political lean shifts the glyph laterally. Ink color = clan.
 
-![Anatomies of Agency -- 80 radial glyphs on construction grid](docs/08-anatomies.png)
+![Rhizome Anatomies -- 48 diverging-alliance glyphs on construction grid](docs/08-anatomies.png)
 
 ### Interlocking Directorates (02)
 
@@ -392,8 +392,10 @@ persistence.py   -- Save/load (gzip JSON), CSV/GEXF/GraphML export,
 server.py        -- FastAPI REST + WebSocket, 45+ endpoints.
 static/          -- D3.js frontend (15 color modes, 7 pen-plotter
                     artifacts, Microscope, 6-panel dashboard).
-screenshot.py    -- Playwright screenshot tool (--artifacts-only,
-                    --port, --no-tick).
+screenshot.py    -- Playwright screenshot tool: UI-driven warmup
+                    fires 13 events and advances 55 years in
+                    staggered phases to populate all artifacts.
+                    (--artifacts-only, --port, --no-tick).
 ```
 
 ## API
