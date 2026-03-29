@@ -1,17 +1,25 @@
 /* CivGraph — Minimalist dark theme, responsive */
 
 :root {
-  --bg: #080810;
-  --surface: #101018;
-  --border: #1a1a28;
-  --text: #c4c4d0;
-  --text-dim: #5e5e72;
-  --accent: #5a8fd4;
-  --accent2: #d46b6b;
+  --bg: #141822;
+  --surface: rgba(22, 26, 38, 0.82);
+  --surface-solid: #181c2a;
+  --border: rgba(70, 80, 110, 0.45);
+  --border-glow: rgba(100, 160, 230, 0.18);
+  --text: #d0d4de;
+  --text-dim: #6e7488;
+  --accent: #5a9fe4;
+  --accent2: #e07070;
   --accent3: #5ad49a;
   --positive: #5ad49a;
-  --negative: #d46b6b;
-  --neutral: #8895a7;
+  --negative: #e07070;
+  --neutral: #8e9ab0;
+  --panel-radius: 6px;
+  --panel-shadow:
+    0 2px 20px rgba(0, 0, 0, 0.4),
+    0 0 1px rgba(100, 160, 230, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --panel-gap: 6px;
 
   /* Responsive scaling base */
   --sidebar-w: clamp(240px, 16vw, 360px);
@@ -25,12 +33,24 @@
 
 body {
   font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
-  background: var(--bg);
+  background: url("/static/textures/gradient-bg.png") center / cover fixed no-repeat;
   color: var(--text);
   overflow: hidden;
   height: 100vh;
   width: 100vw;
   font-size: var(--font-base);
+}
+
+/* Film grain + scanline overlay */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    url("/static/textures/noise.png"),
+    url("/static/textures/scanlines.png");
+  pointer-events: none;
+  z-index: 9999;
 }
 
 /* ── Layout ─────────────────────────────────────── */
@@ -40,13 +60,23 @@ body {
   grid-template-columns: var(--sidebar-w) 1fr var(--detail-w);
   grid-template-rows: var(--header-h) 1fr var(--bottom-h);
   height: 100vh;
-  gap: 1px;
-  background: var(--border);
+  gap: var(--panel-gap);
+  padding: var(--panel-gap);
+  background: transparent;
 }
 
 header {
   grid-column: 1 / -1;
-  background: var(--surface);
+  background:
+    url("/static/textures/title-deco.png"),
+    url("/static/textures/brushed-metal.png"),
+    linear-gradient(180deg, rgba(60, 70, 100, 0.3) 0%, rgba(22, 26, 38, 0.85) 50%, rgba(18, 20, 32, 0.9) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-top: 1px solid rgba(120, 140, 180, 0.25);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -55,11 +85,11 @@ header {
 
 header h1 {
   font-size: clamp(11px, 0.9vw, 14px);
-  font-weight: 400;
-  letter-spacing: 3px;
+  font-weight: 500;
+  letter-spacing: 4px;
   text-transform: uppercase;
   color: var(--accent);
-  opacity: 0.85;
+  text-shadow: 0 0 8px rgba(90, 159, 228, 0.4);
 }
 
 header .stats {
@@ -74,7 +104,14 @@ header .stats span {
 /* ── Sidebar ────────────────────────────────────── */
 
 #sidebar {
-  background: var(--surface);
+  background:
+    url("/static/textures/grid.png"),
+    var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
   overflow-y: auto;
   padding: clamp(8px, 0.8vw, 16px);
 }
@@ -86,6 +123,9 @@ header .stats span {
   color: var(--text-dim);
   margin-bottom: 8px;
   margin-top: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  background: url("/static/textures/title-deco.png") left bottom / auto 12px repeat-x;
 }
 
 #sidebar h2:first-child { margin-top: 0; }
@@ -124,8 +164,9 @@ header .stats span {
 .btn {
   display: inline-block;
   padding: 5px 12px;
-  background: var(--bg);
+  background: linear-gradient(180deg, rgba(50, 55, 75, 0.8) 0%, rgba(25, 28, 40, 0.9) 100%);
   border: 1px solid var(--border);
+  border-top-color: rgba(100, 110, 140, 0.35);
   color: var(--text);
   border-radius: 3px;
   cursor: pointer;
@@ -137,16 +178,18 @@ header .stats span {
 .btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: linear-gradient(180deg, rgba(60, 70, 95, 0.85) 0%, rgba(30, 34, 50, 0.95) 100%);
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: linear-gradient(180deg, #6db3f0 0%, #4a88cc 100%);
+  border-color: #4a88cc;
+  border-top-color: rgba(160, 200, 255, 0.4);
   color: #000;
 }
 
 .btn-primary:hover {
-  background: #6bb3ff;
+  background: linear-gradient(180deg, #80c0f8 0%, #5a98dd 100%);
 }
 
 .btn-danger {
@@ -159,6 +202,54 @@ header .stats span {
   width: 100%;
   text-align: center;
   margin-top: 6px;
+}
+
+/* ── Simulation controls ─────────────────────────────────────────────────── */
+.sim-controls {
+  margin-top: 6px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.btn-sim {
+  width: 36px;
+  height: 30px;
+  font-size: 14px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#btn-play.playing {
+  background: linear-gradient(180deg, #6db3f0 0%, #4a88cc 100%);
+  border-color: #4a88cc;
+  border-top-color: rgba(160, 200, 255, 0.4);
+  color: #000;
+}
+
+.sim-speed {
+  display: flex;
+  gap: 0;
+  margin-left: 2px;
+}
+
+.btn-speed {
+  padding: 4px 7px;
+  font-size: 11px;
+  border-radius: 0;
+  min-width: 28px;
+}
+
+.btn-speed:first-child { border-radius: 3px 0 0 3px; }
+.btn-speed:last-child  { border-radius: 0 3px 3px 0; }
+
+.btn-speed.active {
+  background: linear-gradient(180deg, #6db3f0 0%, #4a88cc 100%);
+  border-color: #4a88cc;
+  border-top-color: rgba(160, 200, 255, 0.4);
+  color: #000;
 }
 
 /* color mode buttons */
@@ -207,7 +298,10 @@ header .stats span {
 /* ── Graph canvas ───────────────────────────────── */
 
 #graph-container {
-  background: radial-gradient(ellipse at 50% 45%, #0f0f1a 0%, var(--bg) 70%);
+  background: radial-gradient(ellipse at 50% 45%, #282e48 0%, #1e2440 55%, #1a2038 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
   position: relative;
   overflow: hidden;
 }
@@ -253,9 +347,12 @@ header .stats span {
 #tooltip {
   position: absolute;
   background: var(--surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border);
   padding: 10px 14px;
-  border-radius: 4px;
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
   font-size: clamp(9px, 0.65vw, 12px);
   pointer-events: none;
   opacity: 0;
@@ -278,7 +375,14 @@ header .stats span {
 /* ── Detail panel ───────────────────────────────── */
 
 #detail {
-  background: var(--surface);
+  background:
+    url("/static/textures/grid.png"),
+    var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
   overflow-y: auto;
   padding: clamp(8px, 0.8vw, 16px);
 }
@@ -292,9 +396,9 @@ header .stats span {
 }
 
 .agent-card {
-  background: var(--bg);
+  background: rgba(16, 18, 28, 0.6);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--panel-radius);
   padding: 10px;
   margin-bottom: 8px;
 }
@@ -388,14 +492,20 @@ header .stats span {
 
 #bottom {
   grid-column: 1 / -1;
-  background: var(--surface);
+  background: transparent;
   display: grid;
   grid-template-columns: 1.1fr 1fr 0.8fr 0.8fr 0.8fr 0.6fr;
-  gap: 1px;
+  gap: var(--panel-gap);
   overflow: hidden;
 }
 
 #env-panel, #event-panel, #economy-panel, #media-panel, #health-panel, #log-panel {
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
   padding: clamp(8px, 0.8vw, 16px);
   overflow-y: auto;
 }
@@ -406,6 +516,9 @@ header .stats span {
   letter-spacing: 1.5px;
   color: var(--text-dim);
   margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  background: url("/static/textures/title-deco.png") left bottom / auto 10px repeat-x;
 }
 
 .event-form {
@@ -656,7 +769,7 @@ input[type="range"]::-webkit-slider-thumb {
 #loading {
   position: fixed;
   inset: 0;
-  background: var(--bg);
+  background: url("/static/textures/gradient-bg.png") center / cover no-repeat, #0e1220;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -703,6 +816,8 @@ input[type="range"]::-webkit-slider-thumb {
   justify-content: space-between;
   padding: 0 24px;
   background: var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   z-index: 1;
 }

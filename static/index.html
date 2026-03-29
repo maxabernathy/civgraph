@@ -128,9 +128,15 @@
         </div>
         <div id="emergence-gauges"><span class="emergence-placeholder">Advance simulation to compute</span></div>
       </div>
-      <div style="margin-top:6px;display:flex;gap:6px;align-items:center">
-        <button class="btn btn-primary" id="btn-tick" style="flex:1">Advance 1 Year</button>
-        <select id="tick-years" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px;border-radius:3px;font-family:inherit;font-size:inherit">
+      <div class="sim-controls">
+        <button class="btn btn-sim" id="btn-play" title="Play / Pause">&#9654;</button>
+        <button class="btn btn-sim" id="btn-step" title="Step forward">&#9197;</button>
+        <div class="sim-speed" id="speed-group">
+          <button class="btn btn-speed active" data-speed="1">1x</button>
+          <button class="btn btn-speed" data-speed="2">2x</button>
+          <button class="btn btn-speed" data-speed="3">3x</button>
+        </div>
+        <select id="tick-years" title="Years per tick" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px;border-radius:3px;font-family:inherit;font-size:inherit">
           <option value="1">1y</option>
           <option value="3">3y</option>
           <option value="5">5y</option>
