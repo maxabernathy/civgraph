@@ -201,32 +201,38 @@ const Artifacts = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // 1. AGENT ANATOMIES — Specimen Plate
+  // 1. RHIZOME ANATOMIES — Diverging Alliances
+  //    (Deleuze & Guattari 1980 — A Thousand Plateaus)
+  //
+  //    Each agent is a root node from which branching tendrils grow
+  //    outward. Tendrils represent domains of alliance: four capitals
+  //    (Bourdieu), interests, institutional ties, political lean.
+  //    Forks visualize how a single person's allegiances diverge
+  //    across incompatible domains. Pen-plotter compatible.
   // ═══════════════════════════════════════════════════════════════════
 
   function renderAnatomies(nodes) {
     const { ctx, w, h } = getCanvasCtx();
     drawRegistration(ctx, w, h);
     drawPlateTitle(ctx, w,
-      "Anatomies of Agency",
-      "Intention, constraint, and agency of the city's most influential individuals",
+      "Rhizome Anatomies",
+      "Diverging alliances and interests \u2014 Deleuze & Guattari after Bourdieu",
       "01"
     );
 
     const sorted = [...nodes].sort((a, b) => b.influence - a.influence);
-    const subjects = sorted.slice(0, 80);
-    const cols = 10;
-    const rows = 8;
+    const subjects = sorted.slice(0, 48);
+    const cols = 8;
+    const rows = 6;
     const margin = { top: 66, right: 24, bottom: 56, left: 24 };
     const iw = w - margin.left - margin.right;
     const ih = h - margin.top - margin.bottom;
     const cellW = iw / cols;
     const cellH = ih / rows;
-    const glyphR = Math.min(cellW, cellH) * 0.32;
 
-    // Visible grid (Swiss: show the construction)
+    // Faint construction grid
     ctx.strokeStyle = GRID;
-    ctx.lineWidth = 0.15;
+    ctx.lineWidth = 0.12;
     for (let c = 0; c <= cols; c++) {
       const x = margin.left + c * cellW;
       ctx.beginPath(); ctx.moveTo(x, margin.top); ctx.lineTo(x, margin.top + ih); ctx.stroke();
@@ -245,18 +251,19 @@ const Artifacts = (() => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const cx = margin.left + col * cellW + cellW / 2;
-      const cy = margin.top + row * cellH + cellH / 2 - 6;
-      drawAgentGlyph(ctx, cx, cy, glyphR, n, clanIdx);
+      const cy = margin.top + row * cellH + cellH / 2 - 4;
+      const span = Math.min(cellW, cellH) * 0.42;
+      drawRhizomeGlyph(ctx, cx, cy, span, n, clanIdx);
 
-      // Name label: sans-serif, uppercase
+      // Name label
       ctx.fillStyle = INK;
       ctx.font = `500 6.5px ${FONT}`;
       ctx.textAlign = "center";
       const surname = n.name.split(" ").slice(-1)[0];
-      ctx.fillText(surname.toUpperCase(), cx, cy + glyphR + 11);
+      ctx.fillText(surname.toUpperCase(), cx, cy + span + 13);
       ctx.fillStyle = INK_FAINT;
-      ctx.font = `300 6px ${FONT}`;
-      ctx.fillText(String(i + 1).padStart(2, "0"), cx, cy + glyphR + 19);
+      ctx.font = `300 5.5px ${FONT}`;
+      ctx.fillText(String(i + 1).padStart(2, "0"), cx, cy + span + 20);
       ctx.textAlign = "left";
     }
 
@@ -269,160 +276,238 @@ const Artifacts = (() => {
     ctx.fillStyle = INK_LIGHT;
     ctx.font = `600 8px ${FONT}`;
     ctx.textAlign = "left";
-    ctx.fillText("READING THE GLYPH", 30, ly + 5);
+    ctx.fillText("READING THE RHIZOME", 30, ly + 5);
     ctx.font = `300 7px ${FONT}`;
     ctx.fillStyle = SEPIA;
     ctx.fillText(
-      "Core dot = agency (influence \u00d7 assertiveness).  Four ring arcs = capital: green = economic, purple = cultural, blue = social, ochre = symbolic.",
+      "Root node = agent (size = influence).  Four primary tendrils: green = economic, purple = cultural, blue = social, ochre = symbolic capital.",
       30, ly + 16
     );
     ctx.fillText(
-      "Inner arc = health (green/red).  Spokes = interests.  Ochre ticks = institutional memberships.  Rotation = political lean.  Stipple = degree.",
+      "Branch forks = interests diverging from each capital.  Red thorns = chronic condition.  Dotted runners = institutional ties.  Lean = political orientation.",
       30, ly + 27
     );
 
-    setMeta("Top 80 agents by influence. Radial glyphs encode capital, health, institutions, interests, and political orientation.");
+    setMeta("Top 48 agents by influence. Rhizome glyphs show diverging alliances across capital, interests, institutions, and political orientation (Deleuze & Guattari).");
   }
 
-  function drawAgentGlyph(ctx, cx, cy, maxR, agent, clanIdx) {
+  // Seeded pseudo-random for deterministic rhizome growth
+  function _rhizoRng(seed) {
+    let s = seed | 0;
+    return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  }
+
+  function drawRhizomeGlyph(ctx, cx, cy, span, agent, clanIdx) {
     const ink = CLAN_INKS[clanIdx[agent.clan] % CLAN_INKS.length];
     const pol = POL_NUM[agent.politics] || 0;
-    const rotation = (pol / 3) * (Math.PI / 6);
+    const cap = agent.capital || {};
+    const capValues = [cap.economic || 0, cap.cultural || 0, cap.social || 0, cap.symbolic || 0];
+    const capColors = [VERDIGRIS, "#6633aa", INDIGO, OCHRE];
+    const capLabels = ["Ec", "Cu", "So", "Sy"];
+    const influence = agent.influence || 0;
+    const assertiveness = agent.assertiveness || 0.5;
+    const degree = agent.degree || 1;
+    const interests = agent.interests || [];
+    const healthVal = agent.health_composite || 0.75;
+    const chronic = agent.chronic_condition || false;
+    const nMemb = agent.membership_count || 0;
+
+    // Deterministic RNG per agent
+    let seed = 0;
+    for (let ci = 0; ci < (agent.name || "x").length; ci++) seed += agent.name.charCodeAt(ci) * (ci + 1);
+    const rng = _rhizoRng(seed);
 
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(rotation);
 
-    const cap = agent.capital || {};
-    const ec = cap.economic || 0;
-    const cu = cap.cultural || 0;
-    const so = cap.social || 0;
-    const sy = cap.symbolic || 0;
-    const influence = agent.influence || 0;
-    const assertiveness = agent.assertiveness || 0.5;
-    const openness = agent.openness || 0.5;
-    const degree = agent.degree || 1;
-    const interests = agent.interests || [];
+    // Political lean shifts the whole rhizome slightly left/right
+    const polShift = (pol / 3) * span * 0.12;
 
-    // Spokes (interests)
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = 0.6;
-    const spokeR = maxR * 0.95;
-    const innerSpokeR = maxR * 0.55;
-    for (const interest of interests) {
-      const angle = INTEREST_ANGLES[interest];
-      if (angle === undefined) continue;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(angle) * innerSpokeR, Math.sin(angle) * innerSpokeR);
-      ctx.lineTo(Math.cos(angle) * spokeR, Math.sin(angle) * spokeR);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(Math.cos(angle) * spokeR, Math.sin(angle) * spokeR, 1.2, 0, Math.PI * 2);
-      ctx.fillStyle = ink;
-      ctx.fill();
-    }
-
-    // Tick marks
-    ctx.strokeStyle = ink;
-    ctx.globalAlpha = 0.12;
-    ctx.lineWidth = 0.3;
-    for (const key of ALL_INTERESTS) {
-      const angle = INTEREST_ANGLES[key];
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(angle) * maxR * 0.88, Math.sin(angle) * maxR * 0.88);
-      ctx.lineTo(Math.cos(angle) * maxR * 0.96, Math.sin(angle) * maxR * 0.96);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    // Capital arcs
-    const ringR = maxR * 0.48;
-    const capColors = [VERDIGRIS, "#6633aa", INDIGO, OCHRE];
-    const capValues = [ec, cu, so, sy];
-    const quadrants = [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
-
-    ctx.strokeStyle = ink;
-    ctx.globalAlpha = 0.12;
-    ctx.lineWidth = 0.4;
-    ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    for (let q = 0; q < 4; q++) {
-      const startAngle = quadrants[q] - (Math.PI / 4);
-      const arcLength = capValues[q] * (Math.PI / 2);
-      if (arcLength < 0.05) continue;
-      ctx.strokeStyle = capColors[q];
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.arc(0, 0, ringR, startAngle, startAngle + arcLength);
-      ctx.stroke();
-    }
-
-    // Capital labels
-    ctx.font = `300 4px ${FONT}`;
-    ctx.fillStyle = ink;
-    ctx.globalAlpha = 0.35;
-    ctx.textAlign = "center";
-    const labelR = ringR + 6;
-    const capLabels = ["Ec", "Cu", "So", "Sy"];
-    for (let q = 0; q < 4; q++) {
-      const a = quadrants[q];
-      ctx.fillText(capLabels[q], Math.cos(a) * labelR, Math.sin(a) * labelR + 1.5);
-    }
-    ctx.globalAlpha = 1;
-    ctx.textAlign = "left";
-
-    // Health arc
-    const healthVal = agent.health_composite || 0.75;
-    const healthArc = healthVal * Math.PI * 2;
-    const healthR = maxR * 0.30;
-    ctx.strokeStyle = healthVal > 0.5 ? VERDIGRIS : OXIDE;
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.45;
+    // ── Root node ──────────────────────────────────────────────
+    const rootR = 2 + influence * assertiveness * span * 0.08;
     ctx.beginPath();
-    ctx.arc(0, 0, healthR, -Math.PI / 2, -Math.PI / 2 + healthArc);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    if (agent.chronic_condition) {
-      ctx.strokeStyle = OXIDE;
-      ctx.lineWidth = 0.6;
-      const cm = healthR * 0.25;
+    ctx.arc(polShift, 0, rootR, 0, Math.PI * 2);
+    ctx.fillStyle = ink;
+    ctx.fill();
+
+    // Faint root halo (degree)
+    if (degree > 3) {
       ctx.beginPath();
-      ctx.moveTo(-cm, -cm); ctx.lineTo(cm, cm);
-      ctx.moveTo(cm, -cm); ctx.lineTo(-cm, cm);
+      ctx.arc(polShift, 0, rootR + 2 + Math.sqrt(degree) * 0.8, 0, Math.PI * 2);
+      ctx.strokeStyle = ink;
+      ctx.globalAlpha = 0.1;
+      ctx.lineWidth = 0.3;
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
-    // Institution marks
-    const nMemb = agent.membership_count || 0;
+    // ── Four primary tendrils (capitals) ───────────────────────
+    // Grow outward in four cardinal-ish directions, with organic wobble
+    const baseAngles = [
+      -Math.PI / 2 + (rng() - 0.5) * 0.3,  // up-ish (economic)
+      0 + (rng() - 0.5) * 0.3,               // right-ish (cultural)
+      Math.PI / 2 + (rng() - 0.5) * 0.3,     // down-ish (social)
+      Math.PI + (rng() - 0.5) * 0.3,          // left-ish (symbolic)
+    ];
+
+    // Map interests to capital domains (5 interests per capital quadrant)
+    const interestSet = new Set(interests);
+    const quadrantInterests = [[], [], [], []];
+    ALL_INTERESTS.forEach((intName, ii) => {
+      if (interestSet.has(intName)) {
+        quadrantInterests[ii % 4].push(intName);
+      }
+    });
+
+    for (let q = 0; q < 4; q++) {
+      const value = capValues[q];
+      if (value < 0.03) continue;
+      const color = capColors[q];
+      const angle = baseAngles[q];
+      const tendrilLen = span * (0.35 + value * 0.55);
+      const ox = polShift;
+      const oy = 0;
+
+      // Draw main tendril as organic curve
+      _drawTendril(ctx, ox, oy, angle, tendrilLen, color, 1.4 + value * 1.2, rng, 5);
+
+      // Capital label at tendril midpoint
+      const midX = ox + Math.cos(angle) * tendrilLen * 0.5;
+      const midY = oy + Math.sin(angle) * tendrilLen * 0.5;
+      ctx.font = `300 3.5px ${FONT}`;
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.5;
+      ctx.textAlign = "center";
+      ctx.fillText(capLabels[q], midX + Math.cos(angle + Math.PI/2) * 5, midY + Math.sin(angle + Math.PI/2) * 5 + 1.2);
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "left";
+
+      // Fork branches at the tendril tip for each interest in this quadrant
+      const qInterests = quadrantInterests[q];
+      const tipX = ox + Math.cos(angle) * tendrilLen;
+      const tipY = oy + Math.sin(angle) * tendrilLen;
+
+      for (let fi = 0; fi < qInterests.length; fi++) {
+        const forkSpread = 0.5 + fi * 0.35;
+        const forkSign = (fi % 2 === 0) ? 1 : -1;
+        const forkAngle = angle + forkSign * forkSpread;
+        const forkLen = span * (0.12 + rng() * 0.14);
+        _drawTendril(ctx, tipX, tipY, forkAngle, forkLen, color, 0.6, rng, 3);
+
+        // Small node at fork tip
+        const ftx = tipX + Math.cos(forkAngle) * forkLen;
+        const fty = tipY + Math.sin(forkAngle) * forkLen;
+        ctx.beginPath();
+        ctx.arc(ftx, fty, 0.9, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+
+      // If no interests in this quadrant, add a terminal node
+      if (qInterests.length === 0) {
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, 1.1, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+    }
+
+    // ── Institutional runners (dotted lateral connections) ─────
     if (nMemb > 0) {
       ctx.strokeStyle = OCHRE;
-      ctx.lineWidth = 0.8;
-      ctx.globalAlpha = 0.6;
+      ctx.globalAlpha = 0.5;
+      ctx.setLineDash([1.5, 2]);
       for (let mi = 0; mi < Math.min(nMemb, 4); mi++) {
-        const a = -Math.PI / 2 + mi * (Math.PI / 6);
+        const ra = baseAngles[mi % 4] + (rng() - 0.5) * 0.8;
+        const rLen = span * (0.25 + rng() * 0.2);
+        ctx.lineWidth = 0.5;
         ctx.beginPath();
-        ctx.moveTo(Math.cos(a) * maxR * 0.82, Math.sin(a) * maxR * 0.82);
-        ctx.lineTo(Math.cos(a) * maxR * 0.92, Math.sin(a) * maxR * 0.92);
+        ctx.moveTo(polShift, 0);
+        // Curved runner
+        const cpx = polShift + Math.cos(ra) * rLen * 0.5 + (rng() - 0.5) * span * 0.15;
+        const cpy = Math.sin(ra) * rLen * 0.5 + (rng() - 0.5) * span * 0.15;
+        const ex = polShift + Math.cos(ra) * rLen;
+        const ey = Math.sin(ra) * rLen;
+        ctx.quadraticCurveTo(cpx, cpy, ex, ey);
+        ctx.stroke();
+        // Small square node at runner end
+        ctx.fillStyle = OCHRE;
+        ctx.fillRect(ex - 1, ey - 1, 2, 2);
+      }
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    // ── Health / chronic condition: thorns ─────────────────────
+    if (chronic) {
+      // Draw small thorn marks near the root
+      ctx.strokeStyle = OXIDE;
+      ctx.lineWidth = 0.7;
+      ctx.globalAlpha = 0.7;
+      for (let ti = 0; ti < 3; ti++) {
+        const ta = rng() * Math.PI * 2;
+        const tr = rootR + 2 + rng() * 4;
+        const tx = polShift + Math.cos(ta) * tr;
+        const ty = Math.sin(ta) * tr;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx + Math.cos(ta) * 3, ty + Math.sin(ta) * 3);
+        ctx.stroke();
+        // Cross at tip
+        const etx = tx + Math.cos(ta) * 3;
+        const ety = ty + Math.sin(ta) * 3;
+        ctx.beginPath();
+        ctx.moveTo(etx - 1, ety - 1); ctx.lineTo(etx + 1, ety + 1);
+        ctx.moveTo(etx + 1, ety - 1); ctx.lineTo(etx - 1, ety + 1);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
 
-    // Core dot
-    const coreR = 1.5 + influence * assertiveness * maxR * 0.32;
-    ctx.beginPath();
-    ctx.arc(0, 0, coreR, 0, Math.PI * 2);
-    ctx.fillStyle = ink;
-    ctx.fill();
-
-    // Stipple
-    const stippleDensity = Math.min(1, Math.sqrt(degree) / 6);
-    if (stippleDensity > 0.1) {
-      stipple(ctx, 0, 0, maxR * 0.35, stippleDensity * 0.7, ink + "30");
+    // Health vitality: stipple density near root (healthy = dense, unhealthy = sparse)
+    if (healthVal > 0.2) {
+      const hDensity = healthVal * 0.5;
+      const hColor = healthVal > 0.5 ? VERDIGRIS : OXIDE;
+      stipple(ctx, polShift, 0, rootR + 3, hDensity, hColor + "25");
     }
 
     ctx.restore();
+  }
+
+  /**
+   * Draw an organic tendril (curved line with slight wobble).
+   * Pen-plotter compatible: pure strokes with Bezier segments.
+   */
+  function _drawTendril(ctx, x0, y0, angle, length, color, width, rng, segments) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+
+    let px = x0, py = y0;
+    const segLen = length / segments;
+    for (let s = 0; s < segments; s++) {
+      const t = (s + 1) / segments;
+      // Slight angular drift per segment for organic feel
+      const drift = (rng() - 0.5) * 0.3;
+      const segAngle = angle + drift * (1 - t * 0.5); // less drift toward tip
+      const nx = px + Math.cos(segAngle) * segLen;
+      const ny = py + Math.sin(segAngle) * segLen;
+      // Control point offset perpendicular to direction
+      const perpAngle = segAngle + Math.PI / 2;
+      const cpOff = (rng() - 0.5) * segLen * 0.6;
+      const cpx = (px + nx) / 2 + Math.cos(perpAngle) * cpOff;
+      const cpy = (py + ny) / 2 + Math.sin(perpAngle) * cpOff;
+      ctx.quadraticCurveTo(cpx, cpy, nx, ny);
+      // Taper: reduce width toward tip
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineWidth = width * (1 - t * 0.5);
+      px = nx;
+      py = ny;
+    }
+    ctx.stroke();
   }
 
   // ═══════════════════════════════════════════════════════════════════

@@ -959,7 +959,7 @@ async function loadEnvironment() {
   const emergence = await safeFetch("/api/emergence");
   if (emergence) renderEmergenceSummary(emergence);
 
-  document.getElementById("btn-tick").addEventListener("click", advanceTick);
+  initSimControls();
 }
 
 function renderEnvironment(env) {
@@ -999,13 +999,63 @@ function renderEnvironment(env) {
   container.innerHTML = html;
 }
 
+// ── Simulation play/pause/step controls ─────────────────────────────────────
+let simPlaying = false;
+let simTimer = null;
+let simTicking = false;
+const SIM_SPEEDS = { 1: 2000, 2: 1000, 3: 400 };
+let simSpeed = 1;
+
+function initSimControls() {
+  const btnPlay = document.getElementById("btn-play");
+  const btnStep = document.getElementById("btn-step");
+
+  btnPlay.addEventListener("click", togglePlay);
+  btnStep.addEventListener("click", () => { if (!simTicking) advanceTick(); });
+
+  document.getElementById("speed-group").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-speed]");
+    if (!btn) return;
+    simSpeed = parseInt(btn.dataset.speed);
+    document.querySelectorAll(".btn-speed").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    if (simPlaying) { clearInterval(simTimer); scheduleAutoTick(); }
+  });
+}
+
+function togglePlay() {
+  simPlaying = !simPlaying;
+  const btn = document.getElementById("btn-play");
+  btn.innerHTML = simPlaying ? "&#9208;" : "&#9654;";
+  btn.classList.toggle("playing", simPlaying);
+  if (simPlaying) {
+    advanceTick();
+    scheduleAutoTick();
+  } else {
+    clearInterval(simTimer);
+    simTimer = null;
+  }
+}
+
+function scheduleAutoTick() {
+  simTimer = setInterval(() => {
+    if (!simTicking) advanceTick();
+  }, SIM_SPEEDS[simSpeed] || 2000);
+}
+
 async function advanceTick() {
+  simTicking = true;
   const years = parseInt(document.getElementById("tick-years").value) || 1;
-  const result = await fetch("/api/tick", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ years }),
-  }).then((r) => r.json());
+  let result;
+  try {
+    result = await fetch("/api/tick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ years }),
+    }).then((r) => r.json());
+  } finally {
+    simTicking = false;
+  }
 
   if (result && result.current) {
     renderEnvironment(result.current);
