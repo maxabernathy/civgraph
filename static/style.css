@@ -298,7 +298,12 @@ header .stats span {
 /* ── Graph canvas ───────────────────────────────── */
 
 #graph-container {
-  background: radial-gradient(ellipse at 50% 45%, #282e48 0%, #1e2440 55%, #1a2038 100%);
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(140, 120, 210, 0.18) 0%, transparent 45%),
+    radial-gradient(ellipse at 80% 25%, rgba(80, 170, 200, 0.14) 0%, transparent 40%),
+    radial-gradient(ellipse at 65% 85%, rgba(100, 200, 160, 0.10) 0%, transparent 40%),
+    radial-gradient(ellipse at 30% 75%, rgba(200, 130, 170, 0.10) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 50%, #2e3550 0%, #262d48 50%, #1e2440 100%);
   border: 1px solid var(--border);
   border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
